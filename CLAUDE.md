@@ -28,7 +28,21 @@ The project follows a **microkernel message-passing architecture** with CPU sema
 **Threading Model**
 - Microkernel-style: each component gets its own task with `CancellationToken` for clean shutdown
 - No shared mutable state between components (only via event messages)
-- Centralized task lifecycle management
+- Centralized task lifecycle management via `Microsoft.Extensions.Hosting`
+
+**Dependency Injection**
+- Uses `Microsoft.Extensions.DependencyInjection` for component registration
+- `AddNeuralCpu()` extension method registers core services (event bus, clock, hosted services)
+- Components receive dependencies via constructor injection
+- Lifecycle managed by `IHostedService` implementations
+
+**Logging**
+- Uses Serilog with `Microsoft.Extensions.Logging` integration
+- Rolling file logs in `logs/` directory (excluded from git)
+- Daily rolling interval with 10MB file size limit
+- Retains 30 days of logs
+- Logs to both file and console
+- Timestamped format: `yyyy-MM-dd HH:mm:ss.fff zzz [LEVEL] Message`
 
 **Key Design Principles**
 - Components are deterministic and observable
@@ -65,10 +79,12 @@ dotnet run --project src/NeuralCpu.Console/NeuralCpu.Console.csproj
 ### Project Structure
 ```
 src/
-  NeuralCpu.Core/           # Core library with event bus and components
-    Events/                 # Event types and IEventBus interface
-    Components/             # CPU components (Clock, future: ALU, Memory, etc.)
-  NeuralCpu.Console/        # Test/debug console application
+  NeuralCpu.Core/              # Core library with event bus and components
+    Events/                    # Event types and IEventBus interface
+    Components/                # CPU components (Clock, future: ALU, Memory, etc.)
+    Services/                  # Hosted services for component lifecycle
+    ServiceCollectionExtensions.cs  # DI registration extension methods
+  NeuralCpu.Console/           # Test/debug TUI application
 ```
 
 ## Current Implementation Status
@@ -76,9 +92,13 @@ src/
 **Implemented:**
 - Event bus with observer pattern
 - Clock module with two-phase operation (rising/falling edges)
-- Hardware interrupt queuing
+- Hardware interrupt queuing (HALT interrupt on vector 0x00)
 - Configurable frequency control
 - Start/Stop/Step controls
+- Microsoft.Extensions.Hosting integration
+- Dependency injection via `AddNeuralCpu()` extension method
+- Serilog logging with rolling file logs (daily rotation, 10MB limit, 30-day retention)
+- Terminal.Gui v2 TUI with real-time monitoring
 
 **Not Yet Implemented:**
 - Registers (accumulator, general-purpose, program counter, flags)
@@ -165,8 +185,13 @@ The Clock ([Clock.cs](src/NeuralCpu.Core/Components/Clock.cs)) generates timing 
 - **Frequency control**: Adjustable Hz (changes take effect next cycle)
 - **Hardware interrupts**: Queues `HardwareInterrupt` events and processes at cycle boundaries
 - **Manual stepping**: `Step()` method for single-cycle execution (debugging)
+- **HALT interrupt**: Vector 0x00 stops the clock if it is currently running
 
 Components should subscribe to `ClockPhaseChanged` and react based on `IsRisingEdge`/`IsFallingEdge` properties.
+
+### Interrupt Vectors
+
+- `0x00` - **HALT**: Stops the clock if running (constant: `Clock.INTERRUPT_HALT`)
 
 ## Future Direction
 

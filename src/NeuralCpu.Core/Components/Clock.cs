@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using NeuralCpu.Core.Events;
 using System.Collections.Concurrent;
 
@@ -9,9 +10,20 @@ namespace NeuralCpu.Core.Components;
 /// </summary>
 public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
 {
+    #region Constants
+
+    /// <summary>
+    /// Interrupt vector for HALT signal.
+    /// When received, the clock will stop if currently running.
+    /// </summary>
+    public const byte INTERRUPT_HALT = 0x00;
+
+    #endregion
+
     #region Fields
 
     private readonly IEventBus _eventBus;
+    private readonly ILogger<Clock> _logger;
     private readonly ConcurrentQueue<HardwareInterrupt> _interruptQueue = new();
     private readonly IDisposable _interruptSubscription;
 
@@ -27,10 +39,13 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
 
     #region Constructors
 
-    public Clock(IEventBus eventBus)
+    public Clock(IEventBus eventBus, ILogger<Clock> logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _interruptSubscription = _eventBus.Subscribe<HardwareInterrupt>(this);
+
+        _logger.LogDebug("Clock initialized");
     }
 
     #endregion
@@ -84,6 +99,7 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
         if (_isRunning)
             return;
 
+        _logger.LogInformation("Starting clock at {Frequency} Hz", _frequencyHz);
         _isRunning = true;
         _cancellationTokenSource = new CancellationTokenSource();
         _clockTask = Task.Run(() => RunClockLoop(_cancellationTokenSource.Token));
@@ -97,11 +113,28 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
         if (!_isRunning)
             return;
 
+        _logger.LogInformation("Stopping clock at cycle {CycleCount}", _cycleCount);
         _isRunning = false;
+
+        // Request cancellation
         _cancellationTokenSource?.Cancel();
-        _clockTask?.Wait(TimeSpan.FromSeconds(1));
+
+        // Wait for task to complete (with timeout)
+        try
+        {
+            _clockTask?.Wait(TimeSpan.FromSeconds(2));
+            _logger.LogDebug("Clock stopped successfully");
+        }
+        catch (AggregateException ex)
+        {
+            // Task was cancelled, which is expected
+            _logger.LogDebug(ex, "Clock task cancelled (expected)");
+        }
+
+        // Clean up resources
         _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = null;
+        _clockTask?.Dispose();
         _clockTask = null;
     }
 
@@ -158,11 +191,24 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
 
     private void ProcessPendingInterrupts()
     {
-        // For now, just dequeue and discard
-        // Later, this will trigger interrupt handling logic
-        while (_interruptQueue.TryDequeue(out _))
+        while (_interruptQueue.TryDequeue(out var interrupt))
         {
-            // Interrupt processing would go here
+            _logger.LogDebug("Processing interrupt vector 0x{Vector:X2}", interrupt.Vector);
+
+            switch (interrupt.Vector)
+            {
+                case INTERRUPT_HALT:
+                    _logger.LogInformation("HALT interrupt received");
+                    if (_isRunning)
+                    {
+                        Stop();
+                    }
+                    break;
+
+                default:
+                    _logger.LogWarning("Unknown interrupt vector 0x{Vector:X2} - ignoring", interrupt.Vector);
+                    break;
+            }
         }
     }
 
