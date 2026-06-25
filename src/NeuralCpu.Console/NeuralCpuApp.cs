@@ -8,20 +8,32 @@ namespace NeuralCpu.Console;
 /// <summary>
 /// Main TUI application for the Neural CPU simulator.
 /// </summary>
-internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObserver<HardwareInterrupt>
+internal sealed class NeuralCpuApp : Window,
+                                     IObserver<ClockPhaseChanged>,
+                                     IObserver<HardwareInterrupt>,
+                                     IObserver<RegisterChanged>
 {
     #region Fields
 
     private readonly IEventBus _eventBus;
     private readonly Clock _clock;
+    private readonly RegisterFile _registerFile;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
+    private readonly IDisposable _registerSubscription;
 
     private readonly Label _statusLabel;
     private readonly Label _cycleLabel;
     private readonly Label _frequencyLabel;
     private readonly Label _phaseLabel;
     private readonly Label _interruptLabel;
+    private readonly Label _r0Label;
+    private readonly Label _r1Label;
+    private readonly Label _r2Label;
+    private readonly Label _r3Label;
+    private readonly Label _pcLabel;
+    private readonly Label _spLabel;
+    private readonly Label _flagsLabel;
     private readonly ListView _eventLog;
 
     private readonly ObservableCollection<string> _eventLogItems = new();
@@ -31,26 +43,28 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock)
+    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
         // Inject dependencies
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _registerFile = registerFile ?? throw new ArgumentNullException(nameof(registerFile));
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
         _interruptSubscription = _eventBus.Subscribe<HardwareInterrupt>(this);
+        _registerSubscription = _eventBus.Subscribe<RegisterChanged>(this);
 
-        // Create status panel
+        // Create status panel (left side)
         var statusFrame = new FrameView()
         {
             Title = "Clock Status",
             X = 0,
             Y = 0,
-            Width = Dim.Fill(),
-            Height = 8
+            Width = Dim.Percent(50),
+            Height = 9
         };
 
         _statusLabel = new Label()
@@ -90,6 +104,67 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
 
         statusFrame.Add(_statusLabel, _cycleLabel, _phaseLabel, _frequencyLabel, _interruptLabel);
 
+        // Create register panel (right side)
+        var registerFrame = new FrameView()
+        {
+            Title = "Registers",
+            X = Pos.Right(statusFrame),
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = 9
+        };
+
+        _r0Label = new Label()
+        {
+            Text = "R0: 0x0000000000000000",
+            X = 1,
+            Y = 0
+        };
+
+        _r1Label = new Label()
+        {
+            Text = "R1: 0x0000000000000000",
+            X = 1,
+            Y = 1
+        };
+
+        _r2Label = new Label()
+        {
+            Text = "R2: 0x0000000000000000",
+            X = 1,
+            Y = 2
+        };
+
+        _r3Label = new Label()
+        {
+            Text = "R3: 0x0000000000000000",
+            X = 1,
+            Y = 3
+        };
+
+        _pcLabel = new Label()
+        {
+            Text = "PC: 0x0000000000000000",
+            X = 1,
+            Y = 4
+        };
+
+        _spLabel = new Label()
+        {
+            Text = "SP: 0x0000000000000000",
+            X = 1,
+            Y = 5
+        };
+
+        _flagsLabel = new Label()
+        {
+            Text = "Flags: ---- (0x0000000000000000)",
+            X = 1,
+            Y = 6
+        };
+
+        registerFrame.Add(_r0Label, _r1Label, _r2Label, _r3Label, _pcLabel, _spLabel, _flagsLabel);
+
         // Create control panel
         var controlFrame = new FrameView()
         {
@@ -97,14 +172,24 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
             X = 0,
             Y = Pos.Bottom(statusFrame),
             Width = Dim.Fill(),
-            Height = 3
+            Height = 4
+        };
+
+        // Define button style (distinct from blue background)
+        var buttonColorScheme = new ColorScheme()
+        {
+            Normal = new Terminal.Gui.Attribute(Color.Black, Color.Gray),
+            Focus = new Terminal.Gui.Attribute(Color.Black, Color.White),
+            HotNormal = new Terminal.Gui.Attribute(Color.BrightCyan, Color.Gray),
+            HotFocus = new Terminal.Gui.Attribute(Color.BrightCyan, Color.White)
         };
 
         var startButton = new Button()
         {
             Text = "_Start",
             X = 1,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         startButton.Accepting += (s, e) =>
         {
@@ -116,7 +201,8 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         {
             Text = "Sto_p",
             X = Pos.Right(startButton) + 2,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         stopButton.Accepting += (s, e) =>
         {
@@ -128,7 +214,8 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         {
             Text = "Step",
             X = Pos.Right(stopButton) + 2,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         stepButton.Accepting += (s, e) =>
         {
@@ -140,7 +227,8 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         {
             Text = "-",
             X = Pos.Right(stepButton) + 4,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         decButton.Accepting += (s, e) =>
         {
@@ -152,7 +240,8 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         {
             Text = "+",
             X = Pos.Right(decButton) + 1,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         incButton.Accepting += (s, e) =>
         {
@@ -164,7 +253,8 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         {
             Text = "_Halt",
             X = Pos.Right(incButton) + 4,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
         haltButton.Accepting += (s, e) =>
         {
@@ -173,27 +263,105 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
             UpdateStatus();
         };
 
-        var interruptButton = new Button()
+        var resetButton = new Button()
         {
-            Text = "_Interrupt",
+            Text = "_Reset",
             X = Pos.Right(haltButton) + 2,
-            Y = 0
+            Y = 0,
+            ColorScheme = buttonColorScheme
         };
-        interruptButton.Accepting += (s, e) =>
+        resetButton.Accepting += (s, e) =>
         {
-            _eventBus.Publish(new HardwareInterrupt(0x10, "Manual interrupt"));
-            LogEvent("Interrupt sent (Vector 0x10)");
+            _eventBus.Publish(new HardwareInterrupt(Clock.INTERRUPT_RESET, "RESET signal"));
+            LogEvent("RESET interrupt sent (Vector 0x01)");
             UpdateStatus();
         };
 
-        controlFrame.Add(startButton, stopButton, stepButton, decButton, incButton, haltButton, interruptButton);
+        controlFrame.Add(startButton, stopButton, stepButton, decButton, incButton, haltButton, resetButton);
+
+        // Create register test panel
+        var testFrame = new FrameView()
+        {
+            Title = "Register Tests",
+            X = 0,
+            Y = Pos.Bottom(controlFrame),
+            Width = Dim.Fill(),
+            Height = 6
+        };
+
+        var writeR0Button = new Button()
+        {
+            Text = "Write R0=0x42",
+            X = 1,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        writeR0Button.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0x42));
+            LogEvent("Write command: R0 = 0x0000000000000042");
+        };
+
+        var writeFlagsButton = new Button()
+        {
+            Text = "Write R1=0xFF (flags)",
+            X = Pos.Right(writeR0Button) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        writeFlagsButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new RegisterWriteWithFlagsCommand(RegisterId.R1, 0xFF));
+            LogEvent("Write with flags: R1 = 0x00000000000000FF");
+        };
+
+        var copyButton = new Button()
+        {
+            Text = "Copy R0→R2",
+            X = Pos.Right(writeFlagsButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        copyButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new RegisterCopyCommand(RegisterId.R0, RegisterId.R2));
+            LogEvent("Copy command: R0 → R2");
+        };
+
+        var writeZeroButton = new Button()
+        {
+            Text = "Write R3=0 (flags)",
+            X = Pos.Right(copyButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        writeZeroButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new RegisterWriteWithFlagsCommand(RegisterId.R3, 0));
+            LogEvent("Write with flags: R3 = 0 (should set Zero flag)");
+        };
+
+        var writeNegButton = new Button()
+        {
+            Text = "Write R3=MSB (flags)",
+            X = 1,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        writeNegButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new RegisterWriteWithFlagsCommand(RegisterId.R3, 0x8000_0000_0000_0000));
+            LogEvent("Write with flags: R3 = 0x8000000000000000 (should set Negative flag)");
+        };
+
+        testFrame.Add(writeR0Button, writeFlagsButton, copyButton, writeZeroButton, writeNegButton);
 
         // Create event log
         var logFrame = new FrameView()
         {
             Title = "Event Log",
             X = 0,
-            Y = Pos.Bottom(controlFrame),
+            Y = Pos.Bottom(testFrame),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
@@ -203,13 +371,25 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = Dim.Fill()
+            Height = Dim.Fill(),
+            AllowsMarking = false,
+            AllowsMultipleSelection = false
         };
         _eventLog.SetSource(_eventLogItems);
 
-        logFrame.Add(_eventLog);
+        // Add a simple vertical scrollbar indicator
+        var scrollIndicator = new Label()
+        {
+            X = Pos.AnchorEnd(1),
+            Y = 0,
+            Width = 1,
+            Height = Dim.Fill(),
+            Text = "│"
+        };
 
-        Add(statusFrame, controlFrame, logFrame);
+        logFrame.Add(_eventLog, scrollIndicator);
+
+        Add(statusFrame, registerFrame, controlFrame, testFrame, logFrame);
 
         // Hook into window closing to ensure cleanup
         Closing += OnClosing;
@@ -240,6 +420,17 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
             _phaseLabel.Text = $"Phase: {_clock.CurrentPhase}";
             _frequencyLabel.Text = $"Frequency: {_clock.FrequencyHz} Hz";
             _interruptLabel.Text = $"Pending Interrupts: {_clock.PendingInterrupts}";
+
+            // Update register displays
+            _r0Label.Text = $"R0: 0x{_registerFile[RegisterId.R0]:X16}";
+            _r1Label.Text = $"R1: 0x{_registerFile[RegisterId.R1]:X16}";
+            _r2Label.Text = $"R2: 0x{_registerFile[RegisterId.R2]:X16}";
+            _r3Label.Text = $"R3: 0x{_registerFile[RegisterId.R3]:X16}";
+            _pcLabel.Text = $"PC: 0x{_registerFile[RegisterId.PC]:X16}";
+            _spLabel.Text = $"SP: 0x{_registerFile[RegisterId.SP]:X16}";
+
+            var flagsValue = _registerFile[RegisterId.Flags];
+            _flagsLabel.Text = $"Flags: {flagsValue.ToFlagString()} (0x{flagsValue:X16})";
         });
     }
 
@@ -274,6 +465,7 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
         // Dispose subscriptions
         _clockSubscription.Dispose();
         _interruptSubscription.Dispose();
+        _registerSubscription.Dispose();
     }
 
     #endregion
@@ -315,6 +507,26 @@ internal sealed class NeuralCpuApp : Window, IObserver<ClockPhaseChanged>, IObse
     void IObserver<HardwareInterrupt>.OnCompleted()
     {
         LogEvent("Interrupt observer completed");
+    }
+
+    #endregion
+
+    #region IObserver<RegisterChanged> Implementation
+
+    void IObserver<RegisterChanged>.OnNext(RegisterChanged value)
+    {
+        LogEvent($"Register {value.RegisterId}: 0x{value.OldValue:X16} → 0x{value.NewValue:X16}");
+        UpdateStatus();
+    }
+
+    void IObserver<RegisterChanged>.OnError(Exception error)
+    {
+        LogEvent($"ERROR: {error.Message}");
+    }
+
+    void IObserver<RegisterChanged>.OnCompleted()
+    {
+        LogEvent("Register observer completed");
     }
 
     #endregion

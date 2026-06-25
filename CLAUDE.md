@@ -81,7 +81,7 @@ dotnet run --project src/NeuralCpu.Console/NeuralCpu.Console.csproj
 src/
   NeuralCpu.Core/              # Core library with event bus and components
     Events/                    # Event types and IEventBus interface
-    Components/                # CPU components (Clock, future: ALU, Memory, etc.)
+    Components/                # CPU components (Clock, RegisterFile, future: ALU, Memory)
     Services/                  # Hosted services for component lifecycle
     ServiceCollectionExtensions.cs  # DI registration extension methods
   NeuralCpu.Console/           # Test/debug TUI application
@@ -92,19 +92,20 @@ src/
 **Implemented:**
 - Event bus with observer pattern
 - Clock module with two-phase operation (rising/falling edges)
-- Hardware interrupt queuing (HALT interrupt on vector 0x00)
+- Hardware interrupt queuing (HALT on 0x00, RESET on 0x01)
+- Register file with 7 ulong registers (R0-R3, PC, SP, Flags)
+- Register write queuing (synchronized to clock rising edge)
+- Register read responses (immediate, no clock sync needed)
 - Configurable frequency control
 - Start/Stop/Step controls
 - Microsoft.Extensions.Hosting integration
 - Dependency injection via `AddNeuralCpu()` extension method
 - Serilog logging with rolling file logs (daily rotation, 10MB limit, 30-day retention)
-- Terminal.Gui v2 TUI with real-time monitoring
+- Terminal.Gui v2 TUI with real-time monitoring of clock and registers
 
 **Not Yet Implemented:**
-- Registers (accumulator, general-purpose, program counter, flags)
 - ALU (arithmetic/logic operations)
 - Memory (RAM)
-- Bus architecture (data/address buses)
 - Neural network control plane (the key innovation)
 
 ## Coding Standards
@@ -186,12 +187,54 @@ The Clock ([Clock.cs](src/NeuralCpu.Core/Components/Clock.cs)) generates timing 
 - **Hardware interrupts**: Queues `HardwareInterrupt` events and processes at cycle boundaries
 - **Manual stepping**: `Step()` method for single-cycle execution (debugging)
 - **HALT interrupt**: Vector 0x00 stops the clock if it is currently running
+- **RESET interrupt**: Vector 0x01 publishes `SystemReset` to all components
 
 Components should subscribe to `ClockPhaseChanged` and react based on `IsRisingEdge`/`IsFallingEdge` properties.
 
 ### Interrupt Vectors
 
 - `0x00` - **HALT**: Stops the clock if running (constant: `Clock.INTERRUPT_HALT`)
+- `0x01` - **RESET**: System-wide reset (constant: `Clock.INTERRUPT_RESET`)
+
+## Register File Details
+
+The RegisterFile ([RegisterFile.cs](src/NeuralCpu.Core/Components/RegisterFile.cs)) contains all CPU registers:
+
+**Registers (all `ulong`, 64-bit):**
+- **R0, R1, R2, R3** - General purpose registers (reset to 0)
+- **PC** (Program Counter) - Points to next instruction (reset to 0)
+- **SP** (Stack Pointer) - Points to top of stack (reset to 0)
+- **Flags** - Status flags (Zero, Carry, Negative, Overflow - reset to 0)
+
+**Operation:**
+- **Simple writes**: `RegisterWriteCommand` - writes value without updating flags
+- **Writes with flags**: `RegisterWriteWithFlagsCommand` - writes value and updates Zero/Negative flags
+- **Register copy**: `RegisterCopyCommand` - copies value from source to destination (like physical CPU read-enable + write-enable)
+- **Reads**: Immediate response via `RegisterReadRequest`/`RegisterReadResponse` (no clock sync needed)
+- **PC auto-increment**: PC increments every clock cycle to give network sense of time passing
+- **Change notification**: Publishes `RegisterChanged` after each write with old/new values
+- **Reset**: Subscribes to `SystemReset` event, restores all registers to zero
+
+All write operations are queued and execute on the clock rising edge (synchronized).
+
+**Direct access** (for debugging only): `registerFile[RegisterId.R0]` returns current value
+
+## CPU Flags
+
+The Flags register ([CpuFlags.cs](src/NeuralCpu.Core/Components/CpuFlags.cs)) uses individual bits for status flags:
+
+**Flag Bits:**
+- **Bit 0 - Zero (Z)**: Set when result is zero
+- **Bit 1 - Carry (C)**: Set when unsigned overflow occurs
+- **Bit 2 - Negative (N)**: Set when result is negative (MSB is 1)
+- **Bit 3 - Overflow (O)**: Set when signed overflow occurs
+
+**Helper Methods:**
+- `flagsValue.HasFlag(CpuFlags.Zero)` - Check if flag is set
+- `flagsValue.SetFlag(CpuFlags.Carry, true)` - Set or clear flag
+- `flagsValue.ToFlagString()` - Format as "ZCNO" or "z-n-" (uppercase = set, dash = clear)
+
+**TUI Display:** Shows both symbolic (`ZCNO` or `----`) and hex representations
 
 ## Future Direction
 

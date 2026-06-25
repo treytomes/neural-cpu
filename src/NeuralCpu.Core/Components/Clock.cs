@@ -18,6 +18,12 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
     /// </summary>
     public const byte INTERRUPT_HALT = 0x00;
 
+    /// <summary>
+    /// Interrupt vector for system-wide RESET signal.
+    /// When received, publishes a SystemReset event to all components.
+    /// </summary>
+    public const byte INTERRUPT_RESET = 0x01;
+
     #endregion
 
     #region Fields
@@ -203,6 +209,11 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
                     {
                         Stop();
                     }
+                    break;
+
+                case INTERRUPT_RESET:
+                    _logger.LogInformation("RESET interrupt received");
+                    _eventBus.Publish(new SystemReset());
                     break;
 
                 default:
