@@ -20,7 +20,10 @@ public enum CpuFlags : ulong
     Negative = 1 << 2,
 
     /// <summary>Overflow flag - set when signed overflow occurs.</summary>
-    Overflow = 1 << 3
+    Overflow = 1 << 3,
+
+    /// <summary>Divide by zero flag - set when division by zero is attempted.</summary>
+    DivideByZero = 1 << 4
 }
 
 /// <summary>
@@ -48,13 +51,14 @@ public static class CpuFlagsExtensions
     }
 
     /// <summary>
-    /// Gets a formatted string representation of the flags (e.g., "ZCNO" or "z-n-").
+    /// Gets a formatted string representation of the flags (e.g., "ZCNOD" or "z-n--").
     /// </summary>
     public static string ToFlagString(this ulong flagsValue)
     {
         return $"{(flagsValue.HasFlag(CpuFlags.Zero) ? 'Z' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.Carry) ? 'C' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.Negative) ? 'N' : '-')}" +
-               $"{(flagsValue.HasFlag(CpuFlags.Overflow) ? 'O' : '-')}";
+               $"{(flagsValue.HasFlag(CpuFlags.Overflow) ? 'O' : '-')}" +
+               $"{(flagsValue.HasFlag(CpuFlags.DivideByZero) ? 'D' : '-')}";
     }
 }

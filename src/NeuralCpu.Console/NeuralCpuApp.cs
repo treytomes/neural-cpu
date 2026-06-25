@@ -18,6 +18,7 @@ internal sealed class NeuralCpuApp : Window,
     private readonly IEventBus _eventBus;
     private readonly Clock _clock;
     private readonly RegisterFile _registerFile;
+    private readonly Alu _alu;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
     private readonly IDisposable _registerSubscription;
@@ -43,7 +44,7 @@ internal sealed class NeuralCpuApp : Window,
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile)
+    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
@@ -51,6 +52,7 @@ internal sealed class NeuralCpuApp : Window,
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _registerFile = registerFile ?? throw new ArgumentNullException(nameof(registerFile));
+        _alu = alu ?? throw new ArgumentNullException(nameof(alu));
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
@@ -356,12 +358,141 @@ internal sealed class NeuralCpuApp : Window,
 
         testFrame.Add(writeR0Button, writeFlagsButton, copyButton, writeZeroButton, writeNegButton);
 
+        // Create ALU test panel
+        var aluTestFrame = new FrameView()
+        {
+            Title = "ALU Tests",
+            X = 0,
+            Y = Pos.Bottom(testFrame),
+            Width = Dim.Fill(),
+            Height = 6
+        };
+
+        var addButton = new Button()
+        {
+            Text = "ADD R0+R1→R2",
+            X = 1,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        addButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluCommand(AluOp.Add, RegisterId.R0, RegisterId.R1, RegisterId.R2));
+            LogEvent("ALU: ADD R0 + R1 → R2");
+        };
+
+        var mulButton = new Button()
+        {
+            Text = "MUL R0*R1→R3",
+            X = Pos.Right(addButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        mulButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluCommand(AluOp.Mul, RegisterId.R0, RegisterId.R1, RegisterId.R3));
+            LogEvent("ALU: MUL R0 * R1 → R3");
+        };
+
+        var divButton = new Button()
+        {
+            Text = "DIV R2/R0→R1",
+            X = Pos.Right(mulButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        divButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluCommand(AluOp.Div, RegisterId.R2, RegisterId.R0, RegisterId.R1));
+            LogEvent("ALU: DIV R2 / R0 → R1");
+        };
+
+        var xorButton = new Button()
+        {
+            Text = "XOR R0^R1→R2",
+            X = Pos.Right(divButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        xorButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluCommand(AluOp.Xor, RegisterId.R0, RegisterId.R1, RegisterId.R2));
+            LogEvent("ALU: XOR R0 ^ R1 → R2");
+        };
+
+        var notButton = new Button()
+        {
+            Text = "NOT R0→R1",
+            X = 1,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        notButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Not, RegisterId.R0, RegisterId.R1));
+            LogEvent("ALU: NOT R0 → R1");
+        };
+
+        var shlButton = new Button()
+        {
+            Text = "SHL R0<<4→R2",
+            X = Pos.Right(notButton) + 2,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        shlButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluImmediateCommand(AluOp.Shl, RegisterId.R0, 4, RegisterId.R2));
+            LogEvent("ALU: SHL R0 << 4 → R2");
+        };
+
+        var rolButton = new Button()
+        {
+            Text = "ROL R0<<<8→R3",
+            X = Pos.Right(shlButton) + 2,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        rolButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluImmediateCommand(AluOp.Rol, RegisterId.R0, 8, RegisterId.R3));
+            LogEvent("ALU: ROL R0 <<< 8 → R3");
+        };
+
+        var aluIncButton = new Button()
+        {
+            Text = "INC R2++→R2",
+            X = Pos.Right(rolButton) + 2,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        aluIncButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Inc, RegisterId.R2, RegisterId.R2));
+            LogEvent("ALU: INC R2++ → R2");
+        };
+
+        var aluDecButton = new Button()
+        {
+            Text = "DEC R3--→R3",
+            X = Pos.Right(aluIncButton) + 2,
+            Y = 2,
+            ColorScheme = buttonColorScheme
+        };
+        aluDecButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Dec, RegisterId.R3, RegisterId.R3));
+            LogEvent("ALU: DEC R3-- → R3");
+        };
+
+        aluTestFrame.Add(addButton, mulButton, divButton, xorButton, notButton, shlButton, rolButton, aluIncButton, aluDecButton);
+
         // Create event log
         var logFrame = new FrameView()
         {
             Title = "Event Log",
             X = 0,
-            Y = Pos.Bottom(testFrame),
+            Y = Pos.Bottom(aluTestFrame),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
@@ -389,7 +520,7 @@ internal sealed class NeuralCpuApp : Window,
 
         logFrame.Add(_eventLog, scrollIndicator);
 
-        Add(statusFrame, registerFrame, controlFrame, testFrame, logFrame);
+        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, logFrame);
 
         // Hook into window closing to ensure cleanup
         Closing += OnClosing;
