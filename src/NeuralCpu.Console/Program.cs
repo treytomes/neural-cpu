@@ -54,9 +54,9 @@ internal class Program
             // Register Network components
             builder.Services.AddSingleton(sp =>
             {
-                var logger = sp.GetRequiredService<ILogger<MockNetwork>>();
+                var logger = sp.GetRequiredService<ILogger<CycleMockNetwork>>();
                 var options = neuralCpuOptions.Network.TaskRunner;
-                return new MockNetwork(logger, options);
+                return new CycleMockNetwork(logger, options);
             });
 
             builder.Services.AddSingleton(sp =>
@@ -76,7 +76,7 @@ internal class Program
                 var registerFile = sp.GetRequiredService<RegisterFile>();
                 var stack = sp.GetRequiredService<Stack>();
                 var memory = sp.GetRequiredService<Memory>();
-                var controller = sp.GetRequiredService<MockNetwork>();
+                var controller = sp.GetRequiredService<CycleMockNetwork>();
                 var stateVectorBuilder = sp.GetRequiredService<StateVectorBuilder>();
                 var options = neuralCpuOptions.Network.TaskRunner;
                 var logger = sp.GetRequiredService<ILogger<TaskRunner>>();

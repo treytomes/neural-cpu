@@ -91,14 +91,17 @@ Network:
     MaxCyclesPerEpisode: 1000
 
     # Memory-mapped I/O addresses for task input/output
+    # NOTE: Using low addresses to fit within default memory capacity (131K words)
+    # High addresses (0x80000000+) would require ~2GB memory allocation
+
     # Input buffer: where task input data is loaded
-    InputBufferAddress: 0x80000000
+    InputBufferAddress: 0x00000000
 
     # Input length: number of input items available
-    InputLengthAddress: 0x80000FF8
+    InputLengthAddress: 0x00001000
 
     # Output buffer: where network writes task results
-    OutputBufferAddress: 0x80001000
+    OutputBufferAddress: 0x00002000
 
     # Output length: number of output items written
-    OutputLengthAddress: 0x80001FF8
+    OutputLengthAddress: 0x00003000

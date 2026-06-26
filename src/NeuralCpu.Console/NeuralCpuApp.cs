@@ -25,7 +25,7 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Alu _alu;
     private readonly Stack _stack;
     private readonly Memory _memory;
-    private readonly MockNetwork _mockNetwork;
+    private readonly CycleMockNetwork _mockNetwork;
     private readonly StateVectorBuilder _stateVectorBuilder;
     private readonly TaskRunner _taskRunner;
     private readonly NeuralCpuOptions _options;
@@ -72,7 +72,7 @@ internal sealed class NeuralCpuApp : Window,
         Alu alu,
         Stack stack,
         Memory memory,
-        MockNetwork mockNetwork,
+        CycleMockNetwork mockNetwork,
         StateVectorBuilder stateVectorBuilder,
         TaskRunner taskRunner,
         IOptions<NeuralCpuOptions> options)
@@ -1361,10 +1361,8 @@ internal sealed class NeuralCpuApp : Window,
     private string GetTaskInfo()
     {
         return @"Memory-Mapped I/O:
-  0x80000000 - INPUT_BUFFER (task input data)
-  0x80000FF8 - INPUT_LENGTH (number of items)
-  0x80001000 - OUTPUT_BUFFER (task output)
-  0x80001FF8 - OUTPUT_LENGTH (items written)
+  Configured in appsettings.yaml
+  (using low addresses for default memory size)
 
 Tasks:
   Echo: Copy input to output
