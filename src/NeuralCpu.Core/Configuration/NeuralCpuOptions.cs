@@ -22,6 +22,9 @@ public sealed class NeuralCpuOptions
 
     /// <summary>UI configuration.</summary>
     public UIOptions UI { get; set; } = new();
+
+    /// <summary>Network configuration.</summary>
+    public NetworkOptions Network { get; set; } = new();
 }
 
 /// <summary>
@@ -121,4 +124,52 @@ public sealed class MemoryViewOptions
 
     /// <summary>Initial viewing address (default: 0x00000000).</summary>
     public ulong InitialAddress { get; set; } = 0x00000000;
+}
+
+/// <summary>
+/// Network state vector configuration.
+/// </summary>
+public sealed class NetworkOptions
+{
+    /// <summary>State vector configuration.</summary>
+    public StateVectorOptions StateVector { get; set; } = new();
+
+    /// <summary>Task runner configuration.</summary>
+    public TaskRunnerOptions TaskRunner { get; set; } = new();
+}
+
+/// <summary>
+/// State vector snapshot configuration.
+/// </summary>
+public sealed class StateVectorOptions
+{
+    /// <summary>Event history window size (default: 64).</summary>
+    public int EventHistorySize { get; set; } = 64;
+
+    /// <summary>Stack snapshot size (top N items, default: 8).</summary>
+    public int StackSnapshotSize { get; set; } = 8;
+
+    /// <summary>Memory snapshot size (default: 16).</summary>
+    public int MemorySnapshotSize { get; set; } = 16;
+}
+
+/// <summary>
+/// Task runner configuration.
+/// </summary>
+public sealed class TaskRunnerOptions
+{
+    /// <summary>Maximum cycles per episode (default: 1000).</summary>
+    public int MaxCyclesPerEpisode { get; set; } = 1000;
+
+    /// <summary>Input buffer base address (default: 0x80000000).</summary>
+    public ulong InputBufferAddress { get; set; } = 0x80000000;
+
+    /// <summary>Input length address (default: 0x80000FF8).</summary>
+    public ulong InputLengthAddress { get; set; } = 0x80000FF8;
+
+    /// <summary>Output buffer base address (default: 0x80001000).</summary>
+    public ulong OutputBufferAddress { get; set; } = 0x80001000;
+
+    /// <summary>Output length address (default: 0x80001FF8).</summary>
+    public ulong OutputLengthAddress { get; set; } = 0x80001FF8;
 }

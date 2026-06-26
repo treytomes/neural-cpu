@@ -71,3 +71,34 @@ UI:
 
     # Initial memory address to view when opening the Memory tab
     InitialAddress: 0x00000000
+
+# Network Configuration
+Network:
+  # State vector configuration (what the network observes)
+  StateVector:
+    # Size of event history window (number of recent events to track)
+    EventHistorySize: 64
+
+    # Number of top stack items to include in state snapshot
+    StackSnapshotSize: 8
+
+    # Number of memory locations to sample (hot regions + fixed I/O addresses)
+    MemorySnapshotSize: 16
+
+  # Task runner configuration
+  TaskRunner:
+    # Maximum cycles per training episode before timeout
+    MaxCyclesPerEpisode: 1000
+
+    # Memory-mapped I/O addresses for task input/output
+    # Input buffer: where task input data is loaded
+    InputBufferAddress: 0x80000000
+
+    # Input length: number of input items available
+    InputLengthAddress: 0x80000FF8
+
+    # Output buffer: where network writes task results
+    OutputBufferAddress: 0x80001000
+
+    # Output length: number of output items written
+    OutputLengthAddress: 0x80001FF8

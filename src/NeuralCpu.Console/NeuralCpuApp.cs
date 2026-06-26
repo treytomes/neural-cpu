@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NeuralCpu.Core.Components;
 using NeuralCpu.Core.Configuration;
 using NeuralCpu.Core.Events;
+using NeuralCpu.Network;
 using Terminal.Gui;
 
 namespace NeuralCpu.Console;
@@ -23,6 +25,9 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Alu _alu;
     private readonly Stack _stack;
     private readonly Memory _memory;
+    private readonly MockNetwork _mockNetwork;
+    private readonly StateVectorBuilder _stateVectorBuilder;
+    private readonly TaskRunner _taskRunner;
     private readonly NeuralCpuOptions _options;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
@@ -43,17 +48,34 @@ internal sealed class NeuralCpuApp : Window,
     private readonly ListView _eventLog;
     private readonly ListView _stackView;
     private readonly ListView _memoryView;
+    private ListView _networkView = null!;
 
     private readonly ObservableCollection<string> _eventLogItems = new();
     private readonly ObservableCollection<string> _stackItems = new();
     private readonly ObservableCollection<string> _memoryItems = new();
+    private readonly ObservableCollection<string> _networkLogItems = new();
     private ulong _memoryViewAddress;
+
+    private bool _networkEnabled = false;
+    private CheckBox? _networkEnabledCheckbox;
+    private RadioGroup? _taskRadioGroup;
+    private Label? _networkStatusLabel;
 
     #endregion
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack, Memory memory, IOptions<NeuralCpuOptions> options)
+    public NeuralCpuApp(
+        IEventBus eventBus,
+        Clock clock,
+        RegisterFile registerFile,
+        Alu alu,
+        Stack stack,
+        Memory memory,
+        MockNetwork mockNetwork,
+        StateVectorBuilder stateVectorBuilder,
+        TaskRunner taskRunner,
+        IOptions<NeuralCpuOptions> options)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
@@ -64,6 +86,9 @@ internal sealed class NeuralCpuApp : Window,
         _alu = alu ?? throw new ArgumentNullException(nameof(alu));
         _stack = stack ?? throw new ArgumentNullException(nameof(stack));
         _memory = memory ?? throw new ArgumentNullException(nameof(memory));
+        _mockNetwork = mockNetwork ?? throw new ArgumentNullException(nameof(mockNetwork));
+        _stateVectorBuilder = stateVectorBuilder ?? throw new ArgumentNullException(nameof(stateVectorBuilder));
+        _taskRunner = taskRunner ?? throw new ArgumentNullException(nameof(taskRunner));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
         // Initialize memory view address from configuration
@@ -301,9 +326,9 @@ internal sealed class NeuralCpuApp : Window,
         {
             Title = "Register Tests",
             X = 0,
-            Y = Pos.Bottom(controlFrame),
+            Y = 0,
             Width = Dim.Fill(),
-            Height = 6
+            Height = Dim.Fill()
         };
 
         var writeR0Button = new Button()
@@ -378,9 +403,9 @@ internal sealed class NeuralCpuApp : Window,
         {
             Title = "ALU Tests",
             X = 0,
-            Y = Pos.Bottom(testFrame),
+            Y = 0,
             Width = Dim.Fill(),
-            Height = 8
+            Height = Dim.Fill()
         };
 
         var addButton = new Button()
@@ -546,9 +571,9 @@ internal sealed class NeuralCpuApp : Window,
         {
             Title = "Stack Tests",
             X = 0,
-            Y = Pos.Bottom(aluTestFrame),
+            Y = 0,
             Width = Dim.Fill(),
-            Height = 4
+            Height = Dim.Fill()
         };
 
         var pushR0Button = new Button()
@@ -623,9 +648,9 @@ internal sealed class NeuralCpuApp : Window,
         {
             Title = "Memory Tests",
             X = 0,
-            Y = Pos.Bottom(stackTestFrame),
+            Y = 0,
             Width = Dim.Fill(),
-            Height = 4
+            Height = Dim.Fill()
         };
 
         var storeDirectButton = new Button()
@@ -682,11 +707,49 @@ internal sealed class NeuralCpuApp : Window,
 
         memoryTestFrame.Add(storeDirectButton, loadDirectButton, storeIndirectButton, loadIndirectButton);
 
+        // Create TabView for test panels (Register, ALU, Stack, Memory)
+        var testTabView = new TabView()
+        {
+            X = 0,
+            Y = Pos.Bottom(controlFrame),
+            Width = Dim.Fill(),
+            Height = 6
+        };
+
+        var registerTestTab = new Tab()
+        {
+            DisplayText = "Register Tests",
+            View = testFrame
+        };
+
+        var aluTestTab = new Tab()
+        {
+            DisplayText = "ALU Tests",
+            View = aluTestFrame
+        };
+
+        var stackTestTab = new Tab()
+        {
+            DisplayText = "Stack Tests",
+            View = stackTestFrame
+        };
+
+        var memoryTestTab = new Tab()
+        {
+            DisplayText = "Memory Tests",
+            View = memoryTestFrame
+        };
+
+        testTabView.AddTab(registerTestTab, false);
+        testTabView.AddTab(aluTestTab, false);
+        testTabView.AddTab(stackTestTab, false);
+        testTabView.AddTab(memoryTestTab, false);
+
         // Create TabView for logs, stack, and memory display
         var tabView = new TabView()
         {
             X = 0,
-            Y = Pos.Bottom(memoryTestFrame),
+            Y = Pos.Bottom(testTabView),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
@@ -745,10 +808,19 @@ internal sealed class NeuralCpuApp : Window,
             View = _memoryView
         };
 
+        // Network control tab
+        var networkTabView = CreateNetworkTab();
+        var networkTab = new Tab()
+        {
+            DisplayText = "Network",
+            View = networkTabView
+        };
+
         // Add tabs to TabView
         tabView.AddTab(eventLogTab, false);
         tabView.AddTab(stackTab, false);
         tabView.AddTab(memoryTab, false);
+        tabView.AddTab(networkTab, false);
 
         // Listen for tab changes to update displays
         tabView.SelectedTabChanged += (s, e) =>
@@ -778,7 +850,7 @@ internal sealed class NeuralCpuApp : Window,
         };
         displayUpdateTimer.Start();
 
-        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, stackTestFrame, memoryTestFrame, tabView);
+        Add(statusFrame, registerFrame, controlFrame, testTabView, tabView);
 
         // Hook into window closing to ensure cleanup
         Closing += OnClosing;
@@ -1059,6 +1131,273 @@ internal sealed class NeuralCpuApp : Window,
     void IObserver<RegisterChanged>.OnCompleted()
     {
         LogEvent("Register observer completed");
+    }
+
+    #endregion
+
+    #region Network Tab
+
+    private View CreateNetworkTab()
+    {
+        var container = new View()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        };
+
+        // Network controls frame
+        var controlsFrame = new FrameView()
+        {
+            Title = "Network Controls",
+            X = 0,
+            Y = 0,
+            Width = Dim.Percent(50),
+            Height = 15
+        };
+
+        // Enable checkbox
+        _networkEnabledCheckbox = new CheckBox()
+        {
+            X = 1,
+            Y = 0,
+            Text = "Enable Network Control"
+        };
+        // Note: CheckBox doesn't have simple events in Terminal.Gui v2 - manage state manually
+        controlsFrame.Add(_networkEnabledCheckbox);
+
+        // Task selection
+        var taskLabel = new Label()
+        {
+            X = 1,
+            Y = 2,
+            Text = "Task:"
+        };
+        controlsFrame.Add(taskLabel);
+
+        _taskRadioGroup = new RadioGroup()
+        {
+            X = 1,
+            Y = 3,
+            RadioLabels = new[] { "Echo (LOAD/STORE)", "Increment (ALU)", "Reverse (Stack)" },
+            SelectedItem = 0
+        };
+        _taskRadioGroup.SelectedItemChanged += (s, e) =>
+        {
+            if (_taskRadioGroup != null)
+                _mockNetwork.CurrentTask = (MockNetworkTask)_taskRadioGroup.SelectedItem;
+            LogNetworkEvent($"Task changed to: {_mockNetwork.CurrentTask}");
+        };
+        controlsFrame.Add(_taskRadioGroup);
+
+        // Run Episode button
+        var runEpisodeButton = new Button()
+        {
+            X = 1,
+            Y = 7,
+            Text = "Run Episode"
+        };
+        runEpisodeButton.Accepting += (s, e) => OnRunEpisodeClicked();
+        controlsFrame.Add(runEpisodeButton);
+
+        // Stop button
+        var stopButton = new Button()
+        {
+            X = 20,
+            Y = 7,
+            Text = "Stop"
+        };
+        stopButton.Accepting += (s, e) =>
+        {
+            _clock.Stop();
+            _networkEnabled = false;
+            UpdateNetworkStatus();
+            LogNetworkEvent("Episode stopped manually");
+        };
+        controlsFrame.Add(stopButton);
+
+        // Reset button
+        var resetButton = new Button()
+        {
+            X = 30,
+            Y = 7,
+            Text = "Reset CPU"
+        };
+        resetButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new HardwareInterrupt(Clock.INTERRUPT_RESET));
+            _stateVectorBuilder.Reset();
+            _mockNetwork.Reset();
+            LogNetworkEvent("CPU and network reset");
+        };
+        controlsFrame.Add(resetButton);
+
+        // Network status
+        _networkStatusLabel = new Label()
+        {
+            X = 1,
+            Y = 9,
+            Text = "Status: Disabled"
+        };
+        controlsFrame.Add(_networkStatusLabel);
+
+        container.Add(controlsFrame);
+
+        // Task info frame
+        var infoFrame = new FrameView()
+        {
+            Title = "Task Information",
+            X = Pos.Right(controlsFrame) + 1,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = 15
+        };
+
+        var infoText = new TextView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            ReadOnly = true,
+            Text = GetTaskInfo()
+        };
+        infoFrame.Add(infoText);
+        container.Add(infoFrame);
+
+        // Network log frame
+        var logFrame = new FrameView()
+        {
+            Title = "Network Log",
+            X = 0,
+            Y = 15,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        };
+
+        _networkView = new ListView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            AllowsMarking = false,
+            AllowsMultipleSelection = false
+        };
+        _networkView.SetSource(_networkLogItems);
+        logFrame.Add(_networkView);
+        container.Add(logFrame);
+
+        return container;
+    }
+
+    private void OnRunEpisodeClicked()
+    {
+        if (_clock.IsRunning)
+        {
+            LogNetworkEvent("ERROR: Clock is already running. Stop it first.");
+            return;
+        }
+
+        LogNetworkEvent($"Starting episode: {_mockNetwork.CurrentTask}");
+
+        // Prepare task input
+        var task = CreateTaskDefinition(_mockNetwork.CurrentTask);
+
+        // Run episode in background
+        Task.Run(() =>
+        {
+            try
+            {
+                var result = _taskRunner.RunEpisode(task);
+
+                Application.Invoke(() =>
+                {
+                    LogNetworkEvent($"Episode complete!");
+                    LogNetworkEvent($"  Success: {result.Success}");
+                    LogNetworkEvent($"  Reward: {result.Reward:F2}");
+                    LogNetworkEvent($"  Cycles: {result.CycleCount}");
+                    LogNetworkEvent($"  Halted: {result.Halted}");
+                    LogNetworkEvent($"  Output: [{string.Join(", ", result.Output.Take(10))}...]");
+                });
+            }
+            catch (Exception ex)
+            {
+                Application.Invoke(() =>
+                {
+                    LogNetworkEvent($"ERROR: {ex.Message}");
+                });
+            }
+        });
+    }
+
+    private TaskDefinition CreateTaskDefinition(MockNetworkTask task)
+    {
+        return task switch
+        {
+            MockNetworkTask.Echo => new TaskDefinition
+            {
+                Name = "Echo",
+                Input = new ulong[] { 1, 2, 3, 4, 5 },
+                ExpectedOutput = new ulong[] { 1, 2, 3, 4, 5 }
+            },
+            MockNetworkTask.Increment => new TaskDefinition
+            {
+                Name = "Increment",
+                Input = new ulong[] { 10, 20, 30, 40, 50 },
+                ExpectedOutput = new ulong[] { 11, 21, 31, 41, 51 }
+            },
+            MockNetworkTask.Reverse => new TaskDefinition
+            {
+                Name = "Reverse",
+                Input = new ulong[] { 1, 2, 3, 4, 5 },
+                ExpectedOutput = new ulong[] { 5, 4, 3, 2, 1 }
+            },
+            _ => throw new InvalidOperationException($"Unknown task: {task}")
+        };
+    }
+
+    private string GetTaskInfo()
+    {
+        return @"Memory-Mapped I/O:
+  0x80000000 - INPUT_BUFFER (task input data)
+  0x80000FF8 - INPUT_LENGTH (number of items)
+  0x80001000 - OUTPUT_BUFFER (task output)
+  0x80001FF8 - OUTPUT_LENGTH (items written)
+
+Tasks:
+  Echo: Copy input to output
+    Tests: LOAD/STORE operations
+
+  Increment: Add 1 to each value
+    Tests: ALU operations (INC)
+
+  Reverse: Reverse input sequence
+    Tests: Stack operations (PUSH/POP)
+
+The network observes CPU state and emits
+control signals (events) each cycle.";
+    }
+
+    private void UpdateNetworkStatus()
+    {
+        var status = _networkEnabled ? "Enabled" : "Disabled";
+        var task = _mockNetwork.CurrentTask.ToString();
+        if (_networkStatusLabel != null)
+            _networkStatusLabel.Text = $"Status: {status} | Task: {task}";
+    }
+
+    private void LogNetworkEvent(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        _networkLogItems.Add($"[{timestamp}] {message}");
+
+        // Keep last 100 items
+        while (_networkLogItems.Count > 100)
+        {
+            _networkLogItems.RemoveAt(0);
+        }
     }
 
     #endregion

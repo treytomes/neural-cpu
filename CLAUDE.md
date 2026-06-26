@@ -44,11 +44,19 @@ The project follows a **microkernel message-passing architecture** with CPU sema
 - Logs to both file and console
 - Timestamped format: `yyyy-MM-dd HH:mm:ss.fff zzz [LEVEL] Message`
 
+**Network Architecture** (`NeuralCpu.Network/`)
+- **Mock Network**: Rule-based controller for testing CPU-network interface
+- **State Vector**: Structured CPU state snapshot (registers, event history, stack, memory)
+- **Event Encoding**: Structured representation with separate type/register/value fields
+- **Task Runner**: Orchestrates observe → decide → act loop with reward computation
+- Three validation tasks: Echo (I/O), Increment (ALU), Reverse (Stack)
+
 **Key Design Principles**
 - Components are deterministic and observable
-- Neural network will eventually replace the control plane (not implemented yet)
+- Network observes CPU state and emits control signals (events)
 - Event-driven rather than direct method calls
 - CPU datapath (ALU, registers, memory) will be fixed; control signals learned by the network
+- Modular MoE architecture planned: Router → Experts → Modules with selective freezing
 
 ## Development Commands
 
@@ -79,12 +87,24 @@ dotnet run --project src/NeuralCpu.Console/NeuralCpu.Console.csproj
 ### Project Structure
 ```
 src/
+  NeuralCpu.Network/           # Neural network controllers and task runners
+    EventType.cs               # Event type enumeration for encoding
+    EncodedEvent.cs            # Structured event representation
+    CpuStateVector.cs          # Complete CPU state snapshot
+    StateVectorBuilder.cs      # Builds state vectors from CPU components
+    INetworkController.cs      # Interface for network controllers
+    MockNetwork.cs             # Rule-based controller (Echo, Increment, Reverse tasks)
+    TaskRunner.cs              # Orchestrates network-CPU execution loop
+src/
   NeuralCpu.Core/              # Core library with event bus and components
     Events/                    # Event types and IEventBus interface
     Components/                # CPU components (Clock, RegisterFile, ALU, Stack, Memory)
     Services/                  # Hosted services for component lifecycle
     ServiceCollectionExtensions.cs  # DI registration extension methods
   NeuralCpu.Console/           # Test/debug TUI application with tabbed display
+tests/
+  NeuralCpu.Network.Tests/     # Unit tests for Network layer
+    EventTypeGuardTests.cs     # Guard test ensuring EventType enum covers all Core events
 .claude/
   journal/                     # Session journal entries documenting evolution
   skills/                      # Custom skills (journal, commit)
@@ -112,8 +132,19 @@ src/
 - Serilog logging with rolling file logs (daily rotation, 10MB limit, 30-day retention)
 - Terminal.Gui v2 TUI with tabbed display (Event Log, Stack, Memory), real-time monitoring
 
+**Recently Added:**
+- **Mock Network** with rule-based controller (Echo, Increment, Reverse tasks)
+- **State Vector Builder** for network observation (registers, events, stack, memory)
+- **Task Runner** with episode orchestration and reward computation
+- **Event Encoding** with structured type/register/value fields
+- **Memory-mapped I/O** at 0x80000000 (input) / 0x80001000 (output)
+- **Unit Tests** with EventType guard (fails if Core events added without enum coverage)
+- **Comprehensive Configuration** via YAML (network state vector sizes, task runner params)
+
 **Not Yet Implemented:**
-- Neural network control plane (the key innovation)
+- Real neural network control plane (TorchSharp integration)
+- ValueEncoder/ValueDecoder for 64-bit precise embeddings
+- Modular MoE architecture with selective freezing
 
 ## Coding Standards
 
@@ -410,12 +441,94 @@ Trade-offs:
 **Recent Write Tracking:**
 Memory maintains a dictionary of `(address, timestamp)` for highlighting recently modified locations in the TUI. Entries older than 5 seconds are considered "not recent" but remain in the dictionary (cleared on reset).
 
-## Future Direction
+## Mock Network (Rule-Based Controller)
 
-The next major milestone is integrating a neural network as the **control plane**:
-- Network reads CPU state (registers, flags, memory)
-- Network outputs control signals (ALU operation, register enables, memory read/write)
-- Network observes results and decides next control action
-- This creates a learned instruction set rather than hardcoded decode logic
+The MockNetwork ([MockNetwork.cs](src/NeuralCpu.Network/MockNetwork.cs)) implements a rule-based controller to validate the CPU-network interface:
 
-This architecture enables genuine continuity and self-reflection in the neural network.
+**Three Validation Tasks:**
+
+1. **Echo Task**: Copy INPUT_BUFFER to OUTPUT_BUFFER
+   - Tests: Basic LOAD/STORE, memory-mapped I/O
+   - Algorithm: Loop through input, read each value, write to output
+
+2. **Increment Task**: Read numbers, write N+1
+   - Tests: ALU operations (INC), arithmetic
+   - Algorithm: Loop through input, increment each value, write result
+
+3. **Reverse Task**: Read sequence, write reversed
+   - Tests: Stack operations (PUSH/POP), LIFO behavior
+   - Algorithm: Push all inputs onto stack, pop all to output
+
+**Memory-Mapped I/O Regions:**
+```
+0x80000000 - INPUT_BUFFER   (read-only, task input data)
+0x80000FF8 - INPUT_LENGTH   (number of input items)
+0x80001000 - OUTPUT_BUFFER  (write-only, task output data)
+0x80001FF8 - OUTPUT_LENGTH  (number of output items)
+```
+
+**State Vector Structure** ([CpuStateVector.cs](src/NeuralCpu.Network/CpuStateVector.cs)):
+- **Registers**: All 7 registers (R0-R3, PC, SP, Flags)
+- **EventHistory**: 64-event sliding window
+- **StackSnapshot**: Top 8 stack items
+- **MemorySnapshot**: 16 sampled locations (hot regions + fixed I/O addresses)
+- **CycleCount**: Temporal awareness
+
+**Event Encoding** ([EncodedEvent.cs](src/NeuralCpu.Network/EncodedEvent.cs)):
+```csharp
+struct EncodedEvent {
+    EventType Type;      // What operation (RegisterWrite, LoadDirect, AluAdd, etc.)
+    RegisterId Reg1;     // First register operand (or None)
+    RegisterId Reg2;     // Second register operand (or None)
+    RegisterId Reg3;     // Third register operand (or None)
+    ulong Value;         // Immediate value, address, or data
+}
+```
+
+Structured encoding allows the network to learn relationships: "I issued RegisterWrite{R0, 42}, now R0 contains 42."
+
+**Task Runner** ([TaskRunner.cs](src/NeuralCpu.Network/TaskRunner.cs)):
+Orchestrates the execution loop:
+1. Reset CPU and controller
+2. Load task input into memory
+3. Loop until HALT or max cycles:
+   - Build state vector
+   - Controller decides next action
+   - Publish event to CPU
+   - Tick clock
+4. Evaluate output buffer against expected result
+5. Compute reward (1.0 = perfect, partial credit for correctness)
+
+## Future Direction: Neural Control Plane
+
+**Planned Architecture (Modular Mixture of Experts):**
+
+```
+Event Stream → Tokenizer → Router
+                            ├─ Expert 1 (ALU operations)    [Module 1, Module 2, ...]
+                            ├─ Expert 2 (Memory management) [Module 1, Module 2, ...]
+                            ├─ Expert 3 (Stack operations)  [Module 1, Module 2, ...]
+                            └─ Expert 4 (Control flow)      [Module 1, Module 2, ...]
+                                → Control Signals → Event Bus
+```
+
+**Key Features:**
+- **Horizontal specialization**: 4 experts, each learns a domain (compute, memory, stack, control)
+- **Vertical depth**: Modules stack within each expert (vocabulary → semantics → strategy)
+- **Selective freezing**: Freeze lower modules when vocabulary is learned, add deeper modules for strategic thinking
+- **Top-K routing**: Activate top-2 experts per cycle for redundancy
+- **Structured I/O**: `ValueEncoder`/`ValueDecoder` for precise 64-bit values (no floating point errors)
+
+**Technology Stack:**
+- **TorchSharp**: C# bindings to LibTorch for full PyTorch feature set
+- Custom MoE architecture with per-module freezing
+- Serialization: Network weights (TorchSharp `save`/`load`) + CPU state (custom binary format)
+
+**Training Tasks:**
+Start with sequence completion via memory-mapped I/O, then progress to:
+- Pattern recognition
+- Arithmetic sequences
+- Control flow learning
+- Self-modification experiments
+
+The mock network validates that the CPU-network interface works. The next step is replacing the rule-based controller with a learned neural network.

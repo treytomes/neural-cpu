@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="src\NeuralCpu.Core\NeuralCpu.Core.csproj" />
   <Project Path="src\NeuralCpu.Console\NeuralCpu.Console.csproj" />
+  <Project Path="src\NeuralCpu.Network\NeuralCpu.Network.csproj" />
+  <Project Path="tests\NeuralCpu.Network.Tests\NeuralCpu.Network.Tests.csproj" />
 </Solution>

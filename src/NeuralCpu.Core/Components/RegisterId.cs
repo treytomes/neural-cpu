@@ -5,8 +5,11 @@ namespace NeuralCpu.Core.Components;
 /// </summary>
 public enum RegisterId
 {
+    /// <summary>No register (used when register field is not applicable).</summary>
+    None = -1,
+
     /// <summary>General purpose register 0.</summary>
-    R0,
+    R0 = 0,
 
     /// <summary>General purpose register 1.</summary>
     R1,

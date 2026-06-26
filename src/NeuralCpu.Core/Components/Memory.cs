@@ -127,6 +127,27 @@ public sealed class Memory : IObserver<ClockPhaseChanged>,
     }
 
     /// <summary>
+    /// Gets all addresses that were recently written (within highlight duration).
+    /// Used by network state vector builder to identify hot memory regions.
+    /// </summary>
+    public IEnumerable<ulong> GetRecentlyWrittenAddresses()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return _recentWrites
+            .Where(kvp => now - kvp.Value < HighlightDuration)
+            .Select(kvp => kvp.Key);
+    }
+
+    /// <summary>
+    /// Gets the timestamp when an address was last written.
+    /// Returns DateTimeOffset.MinValue if the address has never been written.
+    /// </summary>
+    public DateTimeOffset GetLastWriteTime(ulong address)
+    {
+        return _recentWrites.TryGetValue(address, out var time) ? time : DateTimeOffset.MinValue;
+    }
+
+    /// <summary>
     /// Gets a snapshot of memory contents for display purposes.
     /// </summary>
     public ulong[] GetSnapshot(ulong startAddress, int count)

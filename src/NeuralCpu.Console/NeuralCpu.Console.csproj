@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NeuralCpu.Core\NeuralCpu.Core.csproj" />
+    <ProjectReference Include="..\NeuralCpu.Network\NeuralCpu.Network.csproj" />
   </ItemGroup>
 
   <ItemGroup>

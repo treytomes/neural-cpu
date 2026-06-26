@@ -3,6 +3,7 @@
         "appsettings",
         "bottlenecked",
         "datapath",
+        "Indirects",
         "microkernel",
         "mult",
         "Nand",
