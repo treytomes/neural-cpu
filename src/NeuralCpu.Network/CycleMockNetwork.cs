@@ -194,8 +194,17 @@ public sealed class CycleMockNetwork : INetworkController
 
     private object ExecuteReversePhases(ulong length, ulong counter, ulong stackPointer)
     {
-        // Phase 1: Push all items (sp < length)
-        if (stackPointer < length)
+        // Determine which phase we're in based on cycle count
+        // Phase 1: cycles 2 to (1 + 3*length)
+        // Transition: cycle (2 + 3*length)
+        // Phase 2: cycle (3 + 3*length) onwards
+
+        int phase1End = 1 + (int)(3 * length);
+        int transitionCycle = 2 + (int)(3 * length);
+        int phase2Start = 3 + (int)(3 * length);
+
+        // Phase 1: Push all items
+        if (_cycle <= phase1End)
         {
             var pushCycle = (_cycle - 2) % 3;
             return pushCycle switch
@@ -207,15 +216,15 @@ public sealed class CycleMockNetwork : INetworkController
         }
 
         // Transition: Reset counter for phase 2
-        if (stackPointer == length && counter == length)
+        if (_cycle == transitionCycle)
         {
             return new RegisterWriteCommand(RegisterId.R1, 0);
         }
 
         // Phase 2: Pop all items
-        if (counter < length)
+        if (_cycle >= phase2Start && counter < length)
         {
-            var popCycle = _cycle % 3;
+            var popCycle = (_cycle - phase2Start) % 3;
             return popCycle switch
             {
                 0 => new PopCommand(RegisterId.R2),
@@ -224,8 +233,9 @@ public sealed class CycleMockNetwork : INetworkController
             };
         }
 
-        // Done: Store length and halt
-        if (_cycle % 2 == 0)
+        // Done: Store length, then halt
+        int phase2End = phase2Start + (int)(3 * length);
+        if (_cycle == phase2End)
         {
             return new StoreCommand(_options.OutputLengthAddress, RegisterId.R0);
         }
