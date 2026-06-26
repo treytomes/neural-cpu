@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="TorchSharp" Version="0.104.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NeuralCpu.Core\NeuralCpu.Core.csproj" />
   </ItemGroup>
 
