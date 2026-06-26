@@ -20,6 +20,7 @@ internal sealed class NeuralCpuApp : Window,
     private readonly RegisterFile _registerFile;
     private readonly Alu _alu;
     private readonly Stack _stack;
+    private readonly Memory _memory;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
     private readonly IDisposable _registerSubscription;
@@ -38,16 +39,19 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Label _flagsLabel;
     private readonly ListView _eventLog;
     private readonly ListView _stackView;
+    private readonly ListView _memoryView;
 
     private readonly ObservableCollection<string> _eventLogItems = new();
     private readonly ObservableCollection<string> _stackItems = new();
+    private readonly ObservableCollection<string> _memoryItems = new();
     private const int MaxEventLogItems = 100;
+    private ulong _memoryViewAddress = 0;
 
     #endregion
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack)
+    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack, Memory memory)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
@@ -57,6 +61,7 @@ internal sealed class NeuralCpuApp : Window,
         _registerFile = registerFile ?? throw new ArgumentNullException(nameof(registerFile));
         _alu = alu ?? throw new ArgumentNullException(nameof(alu));
         _stack = stack ?? throw new ArgumentNullException(nameof(stack));
+        _memory = memory ?? throw new ArgumentNullException(nameof(memory));
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
@@ -164,7 +169,7 @@ internal sealed class NeuralCpuApp : Window,
 
         _flagsLabel = new Label()
         {
-            Text = "Flags: ---- (0x0000000000000000)",
+            Text = "Flags: -------- (0x0000000000000000)",
             X = 1,
             Y = 6
         };
@@ -607,11 +612,75 @@ internal sealed class NeuralCpuApp : Window,
 
         stackTestFrame.Add(pushR0Button, pushImmButton, popR1Button, peekR2Button, dupButton);
 
-        // Create TabView for logs and stack display
+        // Create memory test panel
+        var memoryTestFrame = new FrameView()
+        {
+            Title = "Memory Tests",
+            X = 0,
+            Y = Pos.Bottom(stackTestFrame),
+            Width = Dim.Fill(),
+            Height = 4
+        };
+
+        var storeDirectButton = new Button()
+        {
+            Text = "STORE R0→[0x100]",
+            X = 1,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        storeDirectButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+            LogEvent("MEMORY: STORE R0 → [0x100]");
+        };
+
+        var loadDirectButton = new Button()
+        {
+            Text = "LOAD [0x100]→R1",
+            X = Pos.Right(storeDirectButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        loadDirectButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new LoadCommand(0x100, RegisterId.R1));
+            LogEvent("MEMORY: LOAD [0x100] → R1");
+        };
+
+        var storeIndirectButton = new Button()
+        {
+            Text = "STORE R1→[R2]",
+            X = Pos.Right(loadDirectButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        storeIndirectButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new StoreIndirectCommand(RegisterId.R2, RegisterId.R1));
+            LogEvent("MEMORY: STORE indirect R1 → [R2]");
+        };
+
+        var loadIndirectButton = new Button()
+        {
+            Text = "LOAD [R2]→R3",
+            X = Pos.Right(storeIndirectButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        loadIndirectButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new LoadIndirectCommand(RegisterId.R2, RegisterId.R3));
+            LogEvent("MEMORY: LOAD indirect [R2] → R3");
+        };
+
+        memoryTestFrame.Add(storeDirectButton, loadDirectButton, storeIndirectButton, loadIndirectButton);
+
+        // Create TabView for logs, stack, and memory display
         var tabView = new TabView()
         {
             X = 0,
-            Y = Pos.Bottom(stackTestFrame),
+            Y = Pos.Bottom(memoryTestFrame),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
@@ -652,31 +721,58 @@ internal sealed class NeuralCpuApp : Window,
             View = _stackView
         };
 
+        // Memory display tab (ListView handles scrolling automatically)
+        _memoryView = new ListView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            AllowsMarking = false,
+            AllowsMultipleSelection = false
+        };
+        _memoryView.SetSource(_memoryItems);
+
+        var memoryTab = new Tab()
+        {
+            DisplayText = "Memory",
+            View = _memoryView
+        };
+
         // Add tabs to TabView
         tabView.AddTab(eventLogTab, false);
         tabView.AddTab(stackTab, false);
+        tabView.AddTab(memoryTab, false);
 
-        // Listen for tab changes to update stack display
+        // Listen for tab changes to update displays
         tabView.SelectedTabChanged += (s, e) =>
         {
             if (tabView.SelectedTab == stackTab)
             {
                 UpdateStackDisplay();
             }
+            else if (tabView.SelectedTab == memoryTab)
+            {
+                UpdateMemoryDisplay();
+            }
         };
 
-        // Also update stack display periodically (every 100ms) when on stack tab
-        var stackUpdateTimer = new System.Timers.Timer(100);
-        stackUpdateTimer.Elapsed += (s, e) =>
+        // Also update displays periodically (every 100ms) when on respective tabs
+        var displayUpdateTimer = new System.Timers.Timer(100);
+        displayUpdateTimer.Elapsed += (s, e) =>
         {
             if (tabView.SelectedTab == stackTab)
             {
                 UpdateStackDisplay();
             }
+            else if (tabView.SelectedTab == memoryTab)
+            {
+                UpdateMemoryDisplay();
+            }
         };
-        stackUpdateTimer.Start();
+        displayUpdateTimer.Start();
 
-        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, stackTestFrame, tabView);
+        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, stackTestFrame, memoryTestFrame, tabView);
 
         // Hook into window closing to ensure cleanup
         Closing += OnClosing;
@@ -797,6 +893,92 @@ internal sealed class NeuralCpuApp : Window,
             while (_stackItems.Count > newItems.Count)
             {
                 _stackItems.RemoveAt(_stackItems.Count - 1);
+            }
+        });
+    }
+
+    private void UpdateMemoryDisplay()
+    {
+        // Build the new list outside the UI thread to avoid race conditions
+        var newItems = new List<string>();
+
+        // Header
+        newItems.Add($"Memory: {_memory.CapacityWords} words ({_memory.CapacityBytes} bytes)");
+        newItems.Add($"Viewing from address: 0x{_memoryViewAddress:X8}");
+        newItems.Add(" ");
+        newItems.Add("Addr     +0               +1               +2               +3               ASCII");
+        newItems.Add("-------  ----------------  ----------------  ----------------  ----------------  ----------------");
+
+        // Get memory snapshot (show 16 rows × 4 words = 64 words = 512 bytes)
+        const int wordsPerRow = 4;
+        const int rowsToShow = 16;
+        const int totalWords = wordsPerRow * rowsToShow;
+
+        var snapshot = _memory.GetSnapshot(_memoryViewAddress, totalWords);
+
+        for (int row = 0; row < rowsToShow && row * wordsPerRow < snapshot.Length; row++)
+        {
+            var rowAddress = _memoryViewAddress + (ulong)(row * wordsPerRow);
+            var line = new System.Text.StringBuilder();
+            line.Append($"{rowAddress:X7}: ");
+
+            // Hex values (4 ulongs per row)
+            var asciiBytes = new List<byte>();
+            for (int col = 0; col < wordsPerRow; col++)
+            {
+                var idx = row * wordsPerRow + col;
+                if (idx < snapshot.Length)
+                {
+                    var value = snapshot[idx];
+                    var highlight = _memory.WasRecentlyChanged(rowAddress + (ulong)col);
+                    line.Append($" {value:X16}");
+
+                    // Collect bytes for ASCII representation (little-endian)
+                    for (int b = 0; b < 8; b++)
+                    {
+                        asciiBytes.Add((byte)((value >> (b * 8)) & 0xFF));
+                    }
+                }
+                else
+                {
+                    line.Append(" ................");
+                }
+            }
+
+            // ASCII representation (32 bytes for 4 ulongs)
+            line.Append("  ");
+            foreach (var b in asciiBytes)
+            {
+                // Printable ASCII or dot
+                line.Append(b >= 32 && b <= 126 ? (char)b : '.');
+            }
+
+            newItems.Add(line.ToString());
+        }
+
+        newItems.Add(" ");
+        newItems.Add("Controls: Use memory test buttons to modify memory");
+
+        // Now update the observable collection atomically on the UI thread
+        Application.Invoke(() =>
+        {
+            // Replace items one by one to avoid Clear() causing ListView confusion
+            for (int i = 0; i < newItems.Count; i++)
+            {
+                if (i < _memoryItems.Count)
+                {
+                    _memoryItems[i] = newItems[i];
+                }
+                else
+                {
+                    _memoryItems.Add(newItems[i]);
+                }
+            }
+
+            // Remove any extra items if new list is shorter
+            while (_memoryItems.Count > newItems.Count)
+            {
+                _memoryItems.RemoveAt(_memoryItems.Count - 1);
             }
         });
     }

@@ -81,7 +81,7 @@ dotnet run --project src/NeuralCpu.Console/NeuralCpu.Console.csproj
 src/
   NeuralCpu.Core/              # Core library with event bus and components
     Events/                    # Event types and IEventBus interface
-    Components/                # CPU components (Clock, RegisterFile, ALU, Stack)
+    Components/                # CPU components (Clock, RegisterFile, ALU, Stack, Memory)
     Services/                  # Hosted services for component lifecycle
     ServiceCollectionExtensions.cs  # DI registration extension methods
   NeuralCpu.Console/           # Test/debug TUI application with tabbed display
@@ -102,6 +102,7 @@ src/
 - Register read responses (immediate, no clock sync needed)
 - **ALU with 21 operations** (binary, unary, bit operations)
 - **Stack with 5 operations** (push, pop, peek, dup) and 64K item limit
+- **Memory with 4 operations** (load/store, direct/indirect addressing) and configurable capacity (default 1MB)
 - PC write protection (read-only time counter)
 - RegisterChanged optimization (publishes only on actual value changes)
 - Configurable frequency control
@@ -109,10 +110,9 @@ src/
 - Microsoft.Extensions.Hosting integration
 - Dependency injection via `AddNeuralCpu()` extension method
 - Serilog logging with rolling file logs (daily rotation, 10MB limit, 30-day retention)
-- Terminal.Gui v2 TUI with tabbed display (Event Log, Stack), real-time monitoring
+- Terminal.Gui v2 TUI with tabbed display (Event Log, Stack, Memory), real-time monitoring
 
 **Not Yet Implemented:**
-- Memory component (general-purpose RAM)
 - Neural network control plane (the key innovation)
 
 ## Coding Standards
@@ -249,13 +249,14 @@ The Flags register ([CpuFlags.cs](src/NeuralCpu.Core/Components/CpuFlags.cs)) us
 - **Bit 4 - DivideByZero (D)**: Set when division by zero is attempted
 - **Bit 5 - StackUnderflow (S)**: Set when popping/peeking from empty stack
 - **Bit 6 - StackOverflow (U)**: Set when pushing to full stack (64K limit)
+- **Bit 7 - MemoryFault (F)**: Set when accessing out-of-bounds memory address
 
 **Helper Methods:**
 - `flagsValue.HasFlag(CpuFlags.Zero)` - Check if flag is set
 - `flagsValue.SetFlag(CpuFlags.Carry, true)` - Set or clear flag
-- `flagsValue.ToFlagString()` - Format as "ZCNODSU" (uppercase = set, dash = clear)
+- `flagsValue.ToFlagString()` - Format as "ZCNODSUF" (uppercase = set, dash = clear)
 
-**TUI Display:** Shows both symbolic (`ZCNODSU` or `-------`) and hex representations
+**TUI Display:** Shows both symbolic (`ZCNODSUF` or `--------`) and hex representations
 
 **Error Handling Philosophy:** Flags use "forgiving failure" - errors set flags and allow execution to continue rather than halting. This enables the network to observe consequences and learn from mistakes.
 
@@ -357,7 +358,57 @@ Using .NET's `Stack<ulong>` instead of custom memory-backed stack:
 - **Thread-safe via clock sync**: All ops execute on rising edge, no concurrent mutation
 - **Snapshot for display**: `ToArray()` provides complete view when needed
 
-Trade-off: Can't directly address stack slots (no "peek at offset N"). Stack is purely LIFO. If network needs random access, use general-purpose registers or future Memory component.
+Trade-off: Can't directly address stack slots (no "peek at offset N"). Stack is purely LIFO. If network needs random access, use general-purpose registers or Memory component.
+
+## Memory Details
+
+The Memory ([Memory.cs](src/NeuralCpu.Core/Components/Memory.cs)) provides random-access word-addressable RAM:
+
+**Operations:**
+- **LOAD (direct)**: `LoadCommand(address, destination)` - reads from address to register
+- **LOAD (indirect)**: `LoadIndirectCommand(addressReg, destination)` - reads from address stored in register
+- **STORE (direct)**: `StoreCommand(address, source)` - writes register to address
+- **STORE (indirect)**: `StoreIndirectCommand(addressReg, source)` - writes register to address stored in register
+
+**Characteristics:**
+- **Capacity**: Default 128K words (1MB), configurable via constructor parameter
+- **Addressing**: Word-addressable (address 0 = first ulong, address 1 = second ulong)
+- **Bus width**: 64-bit ulongs match register width
+- **Error handling**: Out-of-bounds sets MemoryFault flag, returns 0
+- **Thread-safety**: All operations queued and execute on clock rising edge (single-cycle)
+- **Observable state**: `GetSnapshot(startAddr, count)` returns memory range for display
+- **Highlight tracking**: `WasRecentlyChanged(address)` returns true if written within last 5 seconds
+
+**Error Conditions:**
+- **Out-of-bounds access**: LOAD/STORE beyond capacity returns 0 or ignores write, sets MemoryFault flag
+- **Bounds checking**: No modulo wrap - explicit errors are observable to network
+
+**Addressing Modes:**
+- **Direct**: Address literal in command (e.g., LOAD [0x100] → R1)
+- **Register-indirect**: Address stored in register (e.g., LOAD [R2] → R3 reads from address in R2)
+
+**System Reset:**
+- Clears all memory contents (zeros)
+- Clears pending operations
+- Clears recent write tracking
+
+**Direct access** (for debugging only): `memory[address]` indexer property
+
+### Memory Architecture Decision
+
+Using word-addressable RAM instead of byte-addressable:
+- **Simpler**: Address points directly to ulong, no alignment concerns
+- **Bus width match**: 64-bit addresses for 64-bit data
+- **Single-cycle ops**: Load/Store complete in one clock cycle
+- **Configurable capacity**: Constructor parameter allows different memory sizes
+
+Trade-offs:
+- Can't address individual bytes within a word (use bit operations if needed)
+- Less realistic than byte addressing but simpler for learning architecture
+- Network learns memory patterns at word granularity
+
+**Recent Write Tracking:**
+Memory maintains a dictionary of `(address, timestamp)` for highlighting recently modified locations in the TUI. Entries older than 5 seconds are considered "not recent" but remain in the dictionary (cleared on reset).
 
 ## Future Direction
 

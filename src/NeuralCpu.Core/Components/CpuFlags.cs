@@ -29,7 +29,10 @@ public enum CpuFlags : ulong
     StackUnderflow = 1 << 5,
 
     /// <summary>Stack overflow flag - set when pushing to a full stack.</summary>
-    StackOverflow = 1 << 6
+    StackOverflow = 1 << 6,
+
+    /// <summary>Memory fault flag - set when accessing out-of-bounds memory address.</summary>
+    MemoryFault = 1 << 7
 }
 
 /// <summary>
@@ -57,7 +60,7 @@ public static class CpuFlagsExtensions
     }
 
     /// <summary>
-    /// Gets a formatted string representation of the flags (e.g., "ZCNODSU" or "z-n----").
+    /// Gets a formatted string representation of the flags (e.g., "ZCNODSUF" or "z-n-----").
     /// </summary>
     public static string ToFlagString(this ulong flagsValue)
     {
@@ -67,6 +70,7 @@ public static class CpuFlagsExtensions
                $"{(flagsValue.HasFlag(CpuFlags.Overflow) ? 'O' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.DivideByZero) ? 'D' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.StackUnderflow) ? 'S' : '-')}" +
-               $"{(flagsValue.HasFlag(CpuFlags.StackOverflow) ? 'U' : '-')}";
+               $"{(flagsValue.HasFlag(CpuFlags.StackOverflow) ? 'U' : '-')}" +
+               $"{(flagsValue.HasFlag(CpuFlags.MemoryFault) ? 'F' : '-')}";
     }
 }

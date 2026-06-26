@@ -32,11 +32,15 @@ public static class ServiceCollectionExtensions
         // Register stack as singleton
         services.AddSingleton<Components.Stack>();
 
+        // Register memory as singleton
+        services.AddSingleton<Components.Memory>();
+
         // Register hosted services for lifecycle management
         services.AddHostedService<ClockHostedService>();
         services.AddHostedService<RegisterFileHostedService>();
         services.AddHostedService<AluHostedService>();
         services.AddHostedService<StackHostedService>();
+        services.AddHostedService<MemoryHostedService>();
 
         return services;
     }
