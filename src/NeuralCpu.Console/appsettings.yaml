@@ -1,0 +1,73 @@
+# Neural CPU Configuration
+# This file contains all configurable parameters for the Neural CPU simulator.
+
+# Clock Configuration
+Clock:
+  # Initial frequency in Hz when the application starts
+  InitialFrequencyHz: 1
+
+  # Minimum frequency Hz (enforced by UI controls)
+  MinFrequencyHz: 1
+
+  # Maximum frequency Hz (enforced by UI controls)
+  MaxFrequencyHz: 100
+
+  # Timeout in seconds for clock shutdown
+  ShutdownTimeoutSeconds: 2
+
+# Memory Configuration
+Memory:
+  # Memory capacity in words (ulongs)
+  # 131072 words = 1 MB (131072 * 8 bytes)
+  # Increase for larger programs, decrease for lower memory footprint
+  CapacityWords: 131072
+
+  # Duration in seconds to highlight recently written memory locations in the UI
+  HighlightDurationSeconds: 5
+
+# Stack Configuration
+Stack:
+  # Maximum stack size in items (ulongs)
+  # 65536 items = 512 KB (65536 * 8 bytes)
+  MaxSize: 65536
+
+# Register Configuration
+Registers:
+  # Default value for all registers on reset (hexadecimal)
+  DefaultValue: 0x0000000000000000
+
+# Logging Configuration
+Logging:
+  # Log file path pattern (date will be inserted before extension)
+  FilePath: "logs/neural-cpu-.log"
+
+  # Rolling interval in days (1 = daily, 7 = weekly, etc.)
+  RollingIntervalDays: 1
+
+  # Maximum log file size in MB before rolling
+  FileSizeLimitMB: 10
+
+  # Number of log files to retain
+  RetainedFileCountLimit: 30
+
+  # Minimum log level: Debug, Information, Warning, Error, Fatal
+  MinimumLevel: "Debug"
+
+# UI Configuration
+UI:
+  # Maximum number of items to keep in the event log
+  MaxEventLogItems: 100
+
+  # Display update interval in milliseconds for Stack and Memory tabs
+  DisplayUpdateIntervalMs: 100
+
+  # Memory view configuration
+  MemoryView:
+    # Number of words (ulongs) to display per row
+    WordsPerRow: 4
+
+    # Number of rows to display in the memory view
+    RowsToShow: 16
+
+    # Initial memory address to view when opening the Memory tab
+    InitialAddress: 0x00000000

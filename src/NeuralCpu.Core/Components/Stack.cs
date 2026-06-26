@@ -21,8 +21,8 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
 {
     #region Constants
 
-    /// <summary>Maximum stack size in items (64K × 8 bytes = 512KB).</summary>
-    private const int MaxStackSize = 65536;
+    /// <summary>Default maximum stack size in items (64K × 8 bytes = 512KB).</summary>
+    public const int DefaultMaxSize = 65536;
 
     #endregion
 
@@ -31,6 +31,7 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
     private readonly IEventBus _eventBus;
     private readonly RegisterFile _registerFile;
     private readonly ILogger<Stack> _logger;
+    private readonly int _maxStackSize;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _pushSubscription;
     private readonly IDisposable _pushImmediateSubscription;
@@ -51,10 +52,20 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
     #region Constructors
 
     public Stack(IEventBus eventBus, RegisterFile registerFile, ILogger<Stack> logger)
+        : this(eventBus, registerFile, logger, DefaultMaxSize)
+    {
+    }
+
+    public Stack(IEventBus eventBus, RegisterFile registerFile, ILogger<Stack> logger, int maxSize)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _registerFile = registerFile ?? throw new ArgumentNullException(nameof(registerFile));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        if (maxSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSize), "Max size must be positive");
+
+        _maxStackSize = maxSize;
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
@@ -65,7 +76,7 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
         _dupSubscription = _eventBus.Subscribe<DupCommand>(this);
         _resetSubscription = _eventBus.Subscribe<SystemReset>(this);
 
-        _logger.LogDebug("Stack initialized with max size {MaxSize} items", MaxStackSize);
+        _logger.LogDebug("Stack initialized with max size {MaxSize} items", _maxStackSize);
     }
 
     #endregion
@@ -95,9 +106,9 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
         while (_pendingPushCommands.TryDequeue(out var cmd))
         {
             var value = _registerFile[cmd.Source];
-            if (_stack.Count >= MaxStackSize)
+            if (_stack.Count >= _maxStackSize)
             {
-                _logger.LogWarning("Stack overflow: cannot push (max size {MaxSize} reached)", MaxStackSize);
+                _logger.LogWarning("Stack overflow: cannot push (max size {MaxSize} reached)", _maxStackSize);
                 SetFlag(CpuFlags.StackOverflow, true);
             }
             else
@@ -111,9 +122,9 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
         // Process push immediate commands
         while (_pendingPushImmediateCommands.TryDequeue(out var cmd))
         {
-            if (_stack.Count >= MaxStackSize)
+            if (_stack.Count >= _maxStackSize)
             {
-                _logger.LogWarning("Stack overflow: cannot push immediate (max size {MaxSize} reached)", MaxStackSize);
+                _logger.LogWarning("Stack overflow: cannot push immediate (max size {MaxSize} reached)", _maxStackSize);
                 SetFlag(CpuFlags.StackOverflow, true);
             }
             else
@@ -170,9 +181,9 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
                 _logger.LogWarning("Stack underflow: cannot dup (stack is empty)");
                 SetFlag(CpuFlags.StackUnderflow, true);
             }
-            else if (_stack.Count >= MaxStackSize)
+            else if (_stack.Count >= _maxStackSize)
             {
-                _logger.LogWarning("Stack overflow: cannot dup (max size {MaxSize} reached)", MaxStackSize);
+                _logger.LogWarning("Stack overflow: cannot dup (max size {MaxSize} reached)", _maxStackSize);
                 SetFlag(CpuFlags.StackOverflow, true);
             }
             else

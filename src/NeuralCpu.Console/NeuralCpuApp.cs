@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.Options;
 using NeuralCpu.Core.Components;
+using NeuralCpu.Core.Configuration;
 using NeuralCpu.Core.Events;
 using Terminal.Gui;
 
@@ -21,6 +23,7 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Alu _alu;
     private readonly Stack _stack;
     private readonly Memory _memory;
+    private readonly NeuralCpuOptions _options;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
     private readonly IDisposable _registerSubscription;
@@ -44,14 +47,13 @@ internal sealed class NeuralCpuApp : Window,
     private readonly ObservableCollection<string> _eventLogItems = new();
     private readonly ObservableCollection<string> _stackItems = new();
     private readonly ObservableCollection<string> _memoryItems = new();
-    private const int MaxEventLogItems = 100;
-    private ulong _memoryViewAddress = 0;
+    private ulong _memoryViewAddress;
 
     #endregion
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack, Memory memory)
+    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack, Memory memory, IOptions<NeuralCpuOptions> options)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
@@ -62,6 +64,10 @@ internal sealed class NeuralCpuApp : Window,
         _alu = alu ?? throw new ArgumentNullException(nameof(alu));
         _stack = stack ?? throw new ArgumentNullException(nameof(stack));
         _memory = memory ?? throw new ArgumentNullException(nameof(memory));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+
+        // Initialize memory view address from configuration
+        _memoryViewAddress = _options.UI.MemoryView.InitialAddress;
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
@@ -757,8 +763,8 @@ internal sealed class NeuralCpuApp : Window,
             }
         };
 
-        // Also update displays periodically (every 100ms) when on respective tabs
-        var displayUpdateTimer = new System.Timers.Timer(100);
+        // Also update displays periodically when on respective tabs
+        var displayUpdateTimer = new System.Timers.Timer(_options.UI.DisplayUpdateIntervalMs);
         displayUpdateTimer.Elapsed += (s, e) =>
         {
             if (tabView.SelectedTab == stackTab)
@@ -827,7 +833,7 @@ internal sealed class NeuralCpuApp : Window,
             _eventLogItems.Add(logEntry);
 
             // Keep log size manageable
-            while (_eventLogItems.Count > MaxEventLogItems)
+            while (_eventLogItems.Count > _options.UI.MaxEventLogItems)
             {
                 _eventLogItems.RemoveAt(0);
             }
@@ -909,10 +915,10 @@ internal sealed class NeuralCpuApp : Window,
         newItems.Add("Addr     +0               +1               +2               +3               ASCII");
         newItems.Add("-------  ----------------  ----------------  ----------------  ----------------  ----------------");
 
-        // Get memory snapshot (show 16 rows × 4 words = 64 words = 512 bytes)
-        const int wordsPerRow = 4;
-        const int rowsToShow = 16;
-        const int totalWords = wordsPerRow * rowsToShow;
+        // Get memory snapshot from configuration
+        var wordsPerRow = _options.UI.MemoryView.WordsPerRow;
+        var rowsToShow = _options.UI.MemoryView.RowsToShow;
+        var totalWords = wordsPerRow * rowsToShow;
 
         var snapshot = _memory.GetSnapshot(_memoryViewAddress, totalWords);
 

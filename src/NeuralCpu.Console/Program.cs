@@ -1,7 +1,10 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NeuralCpu.Core;
+using NeuralCpu.Core.Configuration;
 using Serilog;
+using Serilog.Events;
 using Terminal.Gui;
 
 namespace NeuralCpu.Console;
@@ -10,28 +13,39 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        // Configure Serilog before building the host
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.Console()
-            .WriteTo.File(
-                path: "logs/neural-cpu-.log",
-                rollingInterval: RollingInterval.Day,
-                rollOnFileSizeLimit: true,
-                fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
-                retainedFileCountLimit: 30,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
-
         try
         {
             var builder = Host.CreateApplicationBuilder(args);
 
+            // Add YAML configuration support
+            builder.Configuration.AddYamlFile("appsettings.yaml", optional: false, reloadOnChange: true);
+
+            // Bind configuration to options
+            var neuralCpuOptions = new NeuralCpuOptions();
+            builder.Configuration.Bind(neuralCpuOptions);
+            builder.Services.Configure<NeuralCpuOptions>(builder.Configuration);
+
+            // Configure Serilog from options
+            var loggingOptions = neuralCpuOptions.Logging;
+            var logLevel = Enum.Parse<LogEventLevel>(loggingOptions.MinimumLevel, ignoreCase: true);
+
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Is(logLevel)
+                .WriteTo.Console()
+                .WriteTo.File(
+                    path: loggingOptions.FilePath,
+                    rollingInterval: RollingInterval.Day,
+                    rollOnFileSizeLimit: true,
+                    fileSizeLimitBytes: loggingOptions.FileSizeLimitMB * 1024 * 1024,
+                    retainedFileCountLimit: loggingOptions.RetainedFileCountLimit,
+                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+                .CreateLogger();
+
             // Add Serilog
             builder.Services.AddSerilog();
 
-            // Register Neural CPU core services
-            builder.Services.AddNeuralCpu();
+            // Register Neural CPU core services with configuration
+            builder.Services.AddNeuralCpu(neuralCpuOptions);
 
             // Register TUI application
             builder.Services.AddSingleton<NeuralCpuApp>();
