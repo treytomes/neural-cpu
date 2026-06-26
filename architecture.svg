@@ -1,0 +1,319 @@
+<svg width="1400" height="1200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="700" y="30" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">
+    Neural CPU Architecture: Transformer with Dual Attention &amp; MoE
+  </text>
+
+  <!-- ============================================ -->
+  <!-- CPU Components (Bottom Layer) -->
+  <!-- ============================================ -->
+  <g id="cpu-layer">
+    <text x="700" y="70" font-size="18" font-weight="bold" text-anchor="middle" fill="#2563eb">
+      CPU Layer (Event-Driven Architecture)
+    </text>
+
+    <!-- Event Bus (Central) -->
+    <rect x="550" y="90" width="300" height="80" fill="#dbeafe" stroke="#2563eb" stroke-width="3" rx="5"/>
+    <text x="700" y="120" font-size="16" font-weight="bold" text-anchor="middle" fill="#1e40af">Event Bus</text>
+    <text x="700" y="140" font-size="12" text-anchor="middle" fill="#1e40af">Publish/Subscribe</text>
+    <text x="700" y="155" font-size="11" text-anchor="middle" fill="#64748b">(IObserver&lt;T&gt; pattern)</text>
+
+    <!-- Clock -->
+    <rect x="50" y="200" width="140" height="90" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="5"/>
+    <text x="120" y="225" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">Clock</text>
+    <text x="120" y="245" font-size="11" text-anchor="middle" fill="#78350f">Rising/Falling Edge</text>
+    <text x="120" y="260" font-size="11" text-anchor="middle" fill="#78350f">Cycle Counter</text>
+    <text x="120" y="275" font-size="11" text-anchor="middle" fill="#78350f">Interrupts (HALT/RESET)</text>
+
+    <!-- Register File -->
+    <rect x="220" y="200" width="140" height="90" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="5"/>
+    <text x="290" y="225" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">Register File</text>
+    <text x="290" y="245" font-size="11" text-anchor="middle" fill="#78350f">R0-R3, PC, SP, Flags</text>
+    <text x="290" y="260" font-size="11" text-anchor="middle" fill="#78350f">Write Queue</text>
+    <text x="290" y="275" font-size="11" text-anchor="middle" fill="#78350f">PC Auto-Increment</text>
+
+    <!-- ALU -->
+    <rect x="390" y="200" width="140" height="90" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="5"/>
+    <text x="460" y="225" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">ALU</text>
+    <text x="460" y="245" font-size="11" text-anchor="middle" fill="#78350f">21 Operations</text>
+    <text x="460" y="260" font-size="11" text-anchor="middle" fill="#78350f">Binary/Unary</text>
+    <text x="460" y="275" font-size="11" text-anchor="middle" fill="#78350f">Flag Updates</text>
+
+    <!-- Stack -->
+    <rect x="560" y="200" width="140" height="90" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="5"/>
+    <text x="630" y="225" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">Stack</text>
+    <text x="630" y="245" font-size="11" text-anchor="middle" fill="#78350f">Push/Pop/Peek/Dup</text>
+    <text x="630" y="260" font-size="11" text-anchor="middle" fill="#78350f">64K Capacity</text>
+    <text x="630" y="275" font-size="11" text-anchor="middle" fill="#78350f">SP Sync</text>
+
+    <!-- Memory -->
+    <rect x="730" y="200" width="140" height="90" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="5"/>
+    <text x="800" y="225" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">Memory</text>
+    <text x="800" y="245" font-size="11" text-anchor="middle" fill="#78350f">Load/Store</text>
+    <text x="800" y="260" font-size="11" text-anchor="middle" fill="#78350f">Direct/Indirect</text>
+    <text x="800" y="275" font-size="11" text-anchor="middle" fill="#78350f">128K Words (1MB)</text>
+
+    <!-- Arrows from components to Event Bus -->
+    <path d="M 120 200 L 650 170" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrowblue)"/>
+    <path d="M 290 200 L 680 170" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrowblue)"/>
+    <path d="M 460 200 L 700 170" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrowblue)"/>
+    <path d="M 630 200 L 700 170" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrowblue)"/>
+    <path d="M 800 200 L 750 170" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrowblue)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- State Vector Builder -->
+  <!-- ============================================ -->
+  <g id="state-builder">
+    <rect x="900" y="110" width="180" height="100" fill="#fef2f2" stroke="#dc2626" stroke-width="2" rx="5"/>
+    <text x="990" y="135" font-size="14" font-weight="bold" text-anchor="middle" fill="#991b1b">State Vector Builder</text>
+    <text x="990" y="155" font-size="11" text-anchor="middle" fill="#7f1d1d">Reads CPU State</text>
+    <text x="990" y="170" font-size="11" text-anchor="middle" fill="#7f1d1d">• Registers (7)</text>
+    <text x="990" y="185" font-size="11" text-anchor="middle" fill="#7f1d1d">• Event History (64×3)</text>
+    <text x="990" y="200" font-size="11" text-anchor="middle" fill="#7f1d1d">• Stack (8) + Memory (16)</text>
+
+    <!-- Arrow from CPU to State Builder -->
+    <path d="M 850 130 L 900 150" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrowred)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Network Layer (Transformer) -->
+  <!-- ============================================ -->
+  <g id="network-layer">
+    <text x="700" y="340" font-size="18" font-weight="bold" text-anchor="middle" fill="#7c3aed">
+      Transformer Network Layer
+    </text>
+
+    <!-- Event Encoder Path (Left) -->
+    <g id="event-encoder">
+      <rect x="150" y="370" width="250" height="380" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" rx="5"/>
+      <text x="275" y="395" font-size="14" font-weight="bold" text-anchor="middle" fill="#5b21b6">Event Encoder</text>
+
+      <!-- Input -->
+      <rect x="170" y="410" width="210" height="40" fill="#e0e7ff" stroke="#6366f1" stroke-width="1" rx="3"/>
+      <text x="275" y="433" font-size="12" text-anchor="middle" fill="#3730a3">Event History (64×3)</text>
+
+      <!-- Embedding -->
+      <rect x="170" y="465" width="210" height="35" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="275" y="485" font-size="11" text-anchor="middle" fill="#5b21b6">Linear(3 → 256)</text>
+
+      <!-- Positional Encoding -->
+      <rect x="170" y="515" width="210" height="35" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="275" y="535" font-size="11" text-anchor="middle" fill="#5b21b6">+ Positional Encoding</text>
+
+      <!-- Transformer Stack -->
+      <rect x="170" y="565" width="210" height="90" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="275" y="585" font-size="11" font-weight="bold" text-anchor="middle" fill="#5b21b6">4× Transformer Block</text>
+      <text x="275" y="605" font-size="10" text-anchor="middle" fill="#6d28d9">• Multi-Head Attention</text>
+      <text x="275" y="620" font-size="10" text-anchor="middle" fill="#6d28d9">• Add &amp; Norm</text>
+      <text x="275" y="635" font-size="10" text-anchor="middle" fill="#6d28d9">• Feed-Forward</text>
+      <text x="275" y="650" font-size="10" text-anchor="middle" fill="#6d28d9">• Add &amp; Norm</text>
+
+      <!-- Output -->
+      <rect x="170" y="670" width="210" height="35" fill="#c4b5fd" stroke="#7c3aed" stroke-width="2" rx="3"/>
+      <text x="275" y="690" font-size="11" font-weight="bold" text-anchor="middle" fill="#5b21b6">Event Embeddings</text>
+      <text x="275" y="705" font-size="10" text-anchor="middle" fill="#6d28d9">(1, 64, 256)</text>
+    </g>
+
+    <!-- CPU State Encoder Path (Right) -->
+    <g id="cpu-encoder">
+      <rect x="1000" y="370" width="250" height="380" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" rx="5"/>
+      <text x="1125" y="395" font-size="14" font-weight="bold" text-anchor="middle" fill="#5b21b6">CPU State Encoder</text>
+
+      <!-- Input -->
+      <rect x="1020" y="410" width="210" height="40" fill="#e0e7ff" stroke="#6366f1" stroke-width="1" rx="3"/>
+      <text x="1125" y="433" font-size="12" text-anchor="middle" fill="#3730a3">CPU State (31×1)</text>
+
+      <!-- Embedding -->
+      <rect x="1020" y="465" width="210" height="35" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="1125" y="485" font-size="11" text-anchor="middle" fill="#5b21b6">Linear(1 → 256)</text>
+
+      <!-- Positional Encoding -->
+      <rect x="1020" y="515" width="210" height="35" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="1125" y="535" font-size="11" text-anchor="middle" fill="#5b21b6">+ Positional Encoding</text>
+
+      <!-- Transformer Stack -->
+      <rect x="1020" y="565" width="210" height="90" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" rx="3"/>
+      <text x="1125" y="585" font-size="11" font-weight="bold" text-anchor="middle" fill="#5b21b6">4× Transformer Block</text>
+      <text x="1125" y="605" font-size="10" text-anchor="middle" fill="#6d28d9">• Multi-Head Attention</text>
+      <text x="1125" y="620" font-size="10" text-anchor="middle" fill="#6d28d9">• Add &amp; Norm</text>
+      <text x="1125" y="635" font-size="10" text-anchor="middle" fill="#6d28d9">• Feed-Forward</text>
+      <text x="1125" y="650" font-size="10" text-anchor="middle" fill="#6d28d9">• Add &amp; Norm</text>
+
+      <!-- Output -->
+      <rect x="1020" y="670" width="210" height="35" fill="#c4b5fd" stroke="#7c3aed" stroke-width="2" rx="3"/>
+      <text x="1125" y="690" font-size="11" font-weight="bold" text-anchor="middle" fill="#5b21b6">CPU Embeddings</text>
+      <text x="1125" y="705" font-size="10" text-anchor="middle" fill="#6d28d9">(1, 31, 256)</text>
+    </g>
+
+    <!-- Arrow from State Builder to Network -->
+    <path d="M 990 210 L 990 350 L 275 350 L 275 370" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrowred)"/>
+    <path d="M 1030 210 L 1030 350 L 1125 350 L 1125 370" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrowred)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Dual Attention Block -->
+  <!-- ============================================ -->
+  <g id="dual-attention">
+    <rect x="450" y="780" width="500" height="140" fill="#fef9c3" stroke="#eab308" stroke-width="3" rx="5"/>
+    <text x="700" y="805" font-size="15" font-weight="bold" text-anchor="middle" fill="#713f12">Dual Attention Block</text>
+
+    <!-- Path 1 -->
+    <rect x="470" y="820" width="210" height="45" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="3"/>
+    <text x="575" y="838" font-size="11" font-weight="bold" text-anchor="middle" fill="#78350f">Events attend to CPU</text>
+    <text x="575" y="853" font-size="10" text-anchor="middle" fill="#92400e">Cross-Attention(Events → CPU)</text>
+
+    <!-- Path 2 -->
+    <rect x="720" y="820" width="210" height="45" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="3"/>
+    <text x="825" y="838" font-size="11" font-weight="bold" text-anchor="middle" fill="#78350f">CPU attends to Events</text>
+    <text x="825" y="853" font-size="10" text-anchor="middle" fill="#92400e">Cross-Attention(CPU → Events)</text>
+
+    <!-- Fusion -->
+    <rect x="470" y="875" width="460" height="35" fill="#fde047" stroke="#ca8a04" stroke-width="2" rx="3"/>
+    <text x="700" y="895" font-size="11" font-weight="bold" text-anchor="middle" fill="#713f12">Fusion: Mean-Pool + Concat + Project</text>
+    <text x="700" y="908" font-size="10" text-anchor="middle" fill="#854d0e">(1, 256)</text>
+
+    <!-- Arrows from encoders to dual attention -->
+    <path d="M 275 720 L 275 790 L 470 840" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#arrowpurple)"/>
+    <path d="M 1125 720 L 1125 790 L 930 840" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#arrowpurple)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- MoE Layer -->
+  <!-- ============================================ -->
+  <g id="moe-layer">
+    <text x="700" y="965" font-size="18" font-weight="bold" text-anchor="middle" fill="#059669">
+      Mixture of Experts Layer
+    </text>
+
+    <!-- Router -->
+    <rect x="570" y="985" width="260" height="60" fill="#d1fae5" stroke="#059669" stroke-width="2" rx="5"/>
+    <text x="700" y="1008" font-size="13" font-weight="bold" text-anchor="middle" fill="#065f46">Router (Top-K=2)</text>
+    <text x="700" y="1025" font-size="11" text-anchor="middle" fill="#047857">Softmax over 4 experts</text>
+    <text x="700" y="1040" font-size="11" text-anchor="middle" fill="#047857">Select ALU, Memory, Stack, or Control</text>
+
+    <!-- Experts -->
+    <g id="experts">
+      <!-- Expert 1: ALU -->
+      <rect x="100" y="1075" width="160" height="95" fill="#dcfce7" stroke="#16a34a" stroke-width="2" rx="5"/>
+      <text x="180" y="1098" font-size="12" font-weight="bold" text-anchor="middle" fill="#14532d">Expert: ALU</text>
+      <text x="180" y="1118" font-size="10" text-anchor="middle" fill="#15803d">Module 1 (Vocab)</text>
+      <text x="180" y="1133" font-size="10" text-anchor="middle" fill="#15803d">Module 2 (Semantics)</text>
+      <text x="180" y="1148" font-size="10" text-anchor="middle" fill="#15803d">Module 3 (Strategy)</text>
+      <text x="180" y="1163" font-size="9" text-anchor="middle" fill="#16a34a">Freezable Layers ❄️</text>
+
+      <!-- Expert 2: Memory -->
+      <rect x="290" y="1075" width="160" height="95" fill="#dcfce7" stroke="#16a34a" stroke-width="2" rx="5"/>
+      <text x="370" y="1098" font-size="12" font-weight="bold" text-anchor="middle" fill="#14532d">Expert: Memory</text>
+      <text x="370" y="1118" font-size="10" text-anchor="middle" fill="#15803d">Module 1 (Vocab)</text>
+      <text x="370" y="1133" font-size="10" text-anchor="middle" fill="#15803d">Module 2 (Semantics)</text>
+      <text x="370" y="1148" font-size="10" text-anchor="middle" fill="#15803d">Module 3 (Strategy)</text>
+      <text x="370" y="1163" font-size="9" text-anchor="middle" fill="#16a34a">Freezable Layers ❄️</text>
+
+      <!-- Expert 3: Stack -->
+      <rect x="480" y="1075" width="160" height="95" fill="#dcfce7" stroke="#16a34a" stroke-width="2" rx="5"/>
+      <text x="560" y="1098" font-size="12" font-weight="bold" text-anchor="middle" fill="#14532d">Expert: Stack</text>
+      <text x="560" y="1118" font-size="10" text-anchor="middle" fill="#15803d">Module 1 (Vocab)</text>
+      <text x="560" y="1133" font-size="10" text-anchor="middle" fill="#15803d">Module 2 (Semantics)</text>
+      <text x="560" y="1148" font-size="10" text-anchor="middle" fill="#15803d">Module 3 (Strategy)</text>
+      <text x="560" y="1163" font-size="9" text-anchor="middle" fill="#16a34a">Freezable Layers ❄️</text>
+
+      <!-- Expert 4: Control -->
+      <rect x="670" y="1075" width="160" height="95" fill="#dcfce7" stroke="#16a34a" stroke-width="2" rx="5"/>
+      <text x="750" y="1098" font-size="12" font-weight="bold" text-anchor="middle" fill="#14532d">Expert: Control</text>
+      <text x="750" y="1118" font-size="10" text-anchor="middle" fill="#15803d">Module 1 (Vocab)</text>
+      <text x="750" y="1133" font-size="10" text-anchor="middle" fill="#15803d">Module 2 (Semantics)</text>
+      <text x="750" y="1148" font-size="10" text-anchor="middle" fill="#15803d">Module 3 (Strategy)</text>
+      <text x="750" y="1163" font-size="9" text-anchor="middle" fill="#16a34a">Freezable Layers ❄️</text>
+    </g>
+
+    <!-- Arrows from router to experts -->
+    <path d="M 630 1045 L 180 1075" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+    <path d="M 660 1045 L 370 1075" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+    <path d="M 730 1045 L 560 1075" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+    <path d="M 760 1045 L 750 1075" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+
+    <!-- Arrow from dual attention to router -->
+    <path d="M 700 920 L 700 985" stroke="#eab308" stroke-width="3" fill="none" marker-end="url(#arrowyellow)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Action Decoder -->
+  <!-- ============================================ -->
+  <g id="action-decoder">
+    <rect x="900" y="1040" width="220" height="100" fill="#fee2e2" stroke="#dc2626" stroke-width="2" rx="5"/>
+    <text x="1010" y="1065" font-size="13" font-weight="bold" text-anchor="middle" fill="#991b1b">Action Decoder</text>
+    <text x="1010" y="1085" font-size="11" text-anchor="middle" fill="#7f1d1d">Linear(256 → 295)</text>
+    <text x="1010" y="1102" font-size="10" text-anchor="middle" fill="#991b1b">→ EncodedEvent</text>
+    <text x="1010" y="1117" font-size="9" text-anchor="middle" fill="#b91c1c">(Type, Reg1-3, Value)</text>
+    <text x="1010" y="1132" font-size="9" text-anchor="middle" fill="#b91c1c">15 + 24 + 256 outputs</text>
+
+    <!-- Arrow from experts to decoder -->
+    <path d="M 750 1100 L 900 1090" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Back to CPU -->
+  <!-- ============================================ -->
+  <g id="action-to-cpu">
+    <rect x="1150" y="1055" width="180" height="70" fill="#fef2f2" stroke="#dc2626" stroke-width="2" rx="5"/>
+    <text x="1240" y="1078" font-size="12" font-weight="bold" text-anchor="middle" fill="#991b1b">CPU Event</text>
+    <text x="1240" y="1095" font-size="10" text-anchor="middle" fill="#7f1d1d">RegisterWriteCommand,</text>
+    <text x="1240" y="1110" font-size="10" text-anchor="middle" fill="#7f1d1d">AluCommand, PushCommand,</text>
+    <text x="1240" y="1125" font-size="10" text-anchor="middle" fill="#7f1d1d">LoadCommand, etc.</text>
+
+    <!-- Arrow from decoder to CPU event -->
+    <path d="M 1120 1090 L 1150 1090" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrowred)"/>
+
+    <!-- Arrow from CPU event back to Event Bus -->
+    <path d="M 1240 1055 L 1240 140 L 850 140" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#arrowred)" stroke-dasharray="5,5"/>
+    <text x="1260" y="600" font-size="11" fill="#991b1b" transform="rotate(90 1260 600)">Publish to Event Bus</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Legend -->
+  <!-- ============================================ -->
+  <g id="legend">
+    <rect x="20" y="1000" width="60" height="180" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" rx="3"/>
+    <text x="50" y="1020" font-size="11" font-weight="bold" text-anchor="middle" fill="#334155">Legend</text>
+
+    <rect x="25" y="1030" width="15" height="15" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+    <text x="45" y="1042" font-size="9" fill="#334155">CPU</text>
+
+    <rect x="25" y="1055" width="15" height="15" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text x="45" y="1067" font-size="9" fill="#334155">Bus</text>
+
+    <rect x="25" y="1080" width="15" height="15" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1"/>
+    <text x="45" y="1092" font-size="9" fill="#334155">Transformer</text>
+
+    <rect x="25" y="1105" width="15" height="15" fill="#fef9c3" stroke="#eab308" stroke-width="1"/>
+    <text x="45" y="1117" font-size="9" fill="#334155">Dual Attn</text>
+
+    <rect x="25" y="1130" width="15" height="15" fill="#dcfce7" stroke="#16a34a" stroke-width="1"/>
+    <text x="45" y="1142" font-size="9" fill="#334155">MoE</text>
+
+    <rect x="25" y="1155" width="15" height="15" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+    <text x="45" y="1167" font-size="9" fill="#334155">Action</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Arrow Markers -->
+  <!-- ============================================ -->
+  <defs>
+    <marker id="arrowblue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowred" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrowpurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowyellow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#eab308"/>
+    </marker>
+    <marker id="arrowgreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+    </marker>
+  </defs>
+</svg>
