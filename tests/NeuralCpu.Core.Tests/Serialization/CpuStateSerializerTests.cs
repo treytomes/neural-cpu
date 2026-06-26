@@ -326,6 +326,275 @@ public sealed class CpuStateSerializerTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => CpuStateSerializer.LoadFromFile(nonExistentFile));
     }
 
+    [Fact]
+    public void Restore_Should_Restore_Clock_State()
+    {
+        // Arrange - advance clock to known state
+        _clock.FrequencyHz = 100;
+        _clock.Step();
+        _clock.Step();
+        _clock.Step();
+
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Modify clock state
+        _clock.FrequencyHz = 1;
+        _clock.Step();
+
+        // Act - restore original state
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - clock state matches original
+        Assert.Equal(3UL, _clock.CycleCount);
+        Assert.Equal(ClockPhase.Low, _clock.CurrentPhase);
+        Assert.Equal(100, _clock.FrequencyHz);
+    }
+
+    [Fact]
+    public void Restore_Should_Restore_Register_Values()
+    {
+        // Arrange - set initial register values
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0x1111));
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R1, 0x2222));
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R2, 0x3333));
+        _clock.Step();
+
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Modify registers
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0x9999));
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R1, 0x8888));
+        _clock.Step();
+
+        // Act - restore original state
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - registers match original
+        Assert.Equal(0x1111UL, _registerFile[RegisterId.R0]);
+        Assert.Equal(0x2222UL, _registerFile[RegisterId.R1]);
+        Assert.Equal(0x3333UL, _registerFile[RegisterId.R2]);
+        Assert.Equal(1UL, _registerFile[RegisterId.PC]); // PC from original state
+    }
+
+    [Fact]
+    public void Restore_Should_Restore_Stack_Contents()
+    {
+        // Arrange - push values onto stack
+        _eventBus.Publish(new PushImmediateCommand(0xAAAA));
+        _clock.Step();
+        _eventBus.Publish(new PushImmediateCommand(0xBBBB));
+        _clock.Step();
+        _eventBus.Publish(new PushImmediateCommand(0xCCCC));
+        _clock.Step();
+
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Modify stack
+        _eventBus.Publish(new PopCommand(RegisterId.R0));
+        _clock.Step();
+
+        // Act - restore original state
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - stack matches original
+        var snapshot = _stack.GetSnapshot();
+        Assert.Equal(3, snapshot.Length);
+        Assert.Equal(0xCCCCUL, snapshot[0]); // Top
+        Assert.Equal(0xBBBBUL, snapshot[1]);
+        Assert.Equal(0xAAAAUL, snapshot[2]); // Bottom
+    }
+
+    [Fact]
+    public void Restore_Should_Restore_Memory_Contents()
+    {
+        // Arrange - write memory values
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0xDEAD));
+        _clock.Step();
+        _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+        _clock.Step();
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0xBEEF));
+        _clock.Step();
+        _eventBus.Publish(new StoreCommand(0x200, RegisterId.R0));
+        _clock.Step();
+
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Modify memory
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0xCAFE));
+        _clock.Step();
+        _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+        _clock.Step();
+
+        // Act - restore original state
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - memory matches original
+        Assert.Equal(0xDEADUL, _memory[0x100]);
+        Assert.Equal(0xBEEFUL, _memory[0x200]);
+    }
+
+    [Fact]
+    public void Restore_Should_Handle_Empty_Stack()
+    {
+        // Arrange - capture with empty stack
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Push items onto stack
+        _eventBus.Publish(new PushImmediateCommand(0x1234));
+        _clock.Step();
+
+        // Act - restore empty stack
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - stack is empty
+        Assert.Equal(0, _stack.Count);
+    }
+
+    [Fact]
+    public void Restore_Should_Handle_Empty_Memory()
+    {
+        // Arrange - capture with empty memory
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Write memory
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0x5678));
+        _clock.Step();
+        _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+        _clock.Step();
+
+        // Act - restore empty memory
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - memory is zeroed
+        Assert.Equal(0UL, _memory[0x100]);
+    }
+
+    [Fact]
+    public void Restore_Should_Clear_Pending_Operations()
+    {
+        // Arrange - capture clean state
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Queue operations but don't execute them (no clock tick)
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0xFFFF));
+        _eventBus.Publish(new PushImmediateCommand(0xAAAA));
+        _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+
+        // Act - restore state (should clear pending operations)
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Tick clock to process any remaining operations
+        _clock.Step();
+
+        // Assert - pending operations were cleared, values remain at restored state
+        Assert.Equal(0UL, _registerFile[RegisterId.R0]); // Not 0xFFFF
+        Assert.Equal(0, _stack.Count); // Not 1
+        Assert.Equal(0UL, _memory[0x100]); // Not 0xFFFF
+    }
+
+    [Fact]
+    public void Full_Restore_Cycle_Should_Preserve_All_State()
+    {
+        // Arrange - create complex CPU state
+        _clock.FrequencyHz = 42;
+
+        // Set registers
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0x1111));
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.R1, 0x2222));
+        _clock.Step();
+
+        // Push stack
+        _eventBus.Publish(new PushCommand(RegisterId.R0));
+        _eventBus.Publish(new PushCommand(RegisterId.R1));
+        _clock.Step();
+
+        // Write memory
+        _eventBus.Publish(new StoreCommand(0x100, RegisterId.R0));
+        _eventBus.Publish(new StoreCommand(0x200, RegisterId.R1));
+        _clock.Step();
+
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Completely trash the state
+        _eventBus.Publish(new HardwareInterrupt(Clock.INTERRUPT_RESET));
+        _clock.Step(); // Process reset
+        _clock.FrequencyHz = 1;
+
+        // Act - restore from snapshot
+        CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, _memory);
+
+        // Assert - everything matches original
+        Assert.Equal(3UL, _clock.CycleCount);
+        Assert.Equal(42, _clock.FrequencyHz);
+        Assert.Equal(0x1111UL, _registerFile[RegisterId.R0]);
+        Assert.Equal(0x2222UL, _registerFile[RegisterId.R1]);
+        Assert.Equal(2, _stack.Count);
+        var stackSnapshot = _stack.GetSnapshot();
+        Assert.Equal(0x2222UL, stackSnapshot[0]); // Top
+        Assert.Equal(0x1111UL, stackSnapshot[1]); // Bottom
+        Assert.Equal(0x1111UL, _memory[0x100]);
+        Assert.Equal(0x2222UL, _memory[0x200]);
+    }
+
+    [Fact]
+    public void Restore_Should_Throw_When_Memory_Capacity_Mismatch()
+    {
+        // Arrange - capture state with default capacity
+        var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+        // Create new components with different memory capacity
+        var smallMemory = new Memory(_eventBus, _registerFile, NullLogger<Memory>.Instance, 1024);
+
+        // Act & Assert
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            CpuStateSerializer.Restore(originalState, _clock, _registerFile, _stack, smallMemory));
+
+        Assert.Contains("Memory capacity mismatch", exception.Message);
+    }
+
+    [Fact]
+    public void SaveToFile_Restore_LoadFromFile_Should_Roundtrip()
+    {
+        // Arrange - create state
+        var tempFile = Path.GetTempFileName();
+
+        try
+        {
+            _clock.FrequencyHz = 7;
+            _eventBus.Publish(new RegisterWriteCommand(RegisterId.R0, 0xABCD));
+            _eventBus.Publish(new PushImmediateCommand(0x1234));
+            _clock.Step();
+            _eventBus.Publish(new StoreCommand(0x50, RegisterId.R0));
+            _clock.Step();
+
+            var originalState = CpuStateSerializer.Capture(_clock, _registerFile, _stack, _memory);
+
+            // Act - save, trash state, load, restore
+            CpuStateSerializer.SaveToFile(originalState, tempFile);
+
+            _eventBus.Publish(new HardwareInterrupt(Clock.INTERRUPT_RESET));
+            _clock.Step();
+
+            var loadedState = CpuStateSerializer.LoadFromFile(tempFile);
+            CpuStateSerializer.Restore(loadedState, _clock, _registerFile, _stack, _memory);
+
+            // Assert - matches original
+            Assert.Equal(2UL, _clock.CycleCount);
+            Assert.Equal(7, _clock.FrequencyHz);
+            Assert.Equal(0xABCDUL, _registerFile[RegisterId.R0]);
+            Assert.Equal(1, _stack.Count);
+            Assert.Equal(0x1234UL, _stack.GetSnapshot()[0]);
+            Assert.Equal(0xABCDUL, _memory[0x50]);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
     public void Dispose()
     {
         _clock.Dispose();

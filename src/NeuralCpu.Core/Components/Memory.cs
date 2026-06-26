@@ -161,6 +161,44 @@ public sealed class Memory : IObserver<ClockPhaseChanged>,
         return snapshot;
     }
 
+    /// <summary>
+    /// Restores memory contents from a sparse representation.
+    /// WARNING: This bypasses the event-driven model and directly mutates internal state.
+    /// Should only be used for deserialization/checkpointing.
+    /// </summary>
+    /// <param name="sparseMemory">Dictionary mapping addresses to non-zero values.</param>
+    public void RestoreState(Dictionary<ulong, ulong> sparseMemory)
+    {
+        ArgumentNullException.ThrowIfNull(sparseMemory);
+
+        // Clear any pending operations first
+        while (_pendingLoads.TryDequeue(out _)) { }
+        while (_pendingLoadIndirects.TryDequeue(out _)) { }
+        while (_pendingStores.TryDequeue(out _)) { }
+        while (_pendingStoreIndirects.TryDequeue(out _)) { }
+
+        // Clear current memory and recent writes
+        Array.Clear(_memory, 0, _memory.Length);
+        _recentWrites.Clear();
+
+        // Restore non-zero values from sparse representation
+        int restoredCount = 0;
+        foreach (var (address, value) in sparseMemory)
+        {
+            if (IsValidAddress(address))
+            {
+                _memory[address] = value;
+                restoredCount++;
+            }
+            else
+            {
+                _logger.LogWarning("Memory restore: skipping out-of-bounds address 0x{Address:X16}", address);
+            }
+        }
+
+        _logger.LogInformation("Memory state restored: {Count} non-zero words", restoredCount);
+    }
+
     private void ProcessPendingOperations()
     {
         // Process direct loads

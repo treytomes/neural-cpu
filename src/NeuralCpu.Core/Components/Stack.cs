@@ -100,6 +100,44 @@ public sealed class Stack : IObserver<ClockPhaseChanged>,
 
     #region Methods
 
+    /// <summary>
+    /// Restores stack contents from a snapshot.
+    /// WARNING: This bypasses the event-driven model and directly mutates internal state.
+    /// Should only be used for deserialization/checkpointing.
+    /// </summary>
+    /// <param name="stackContents">Stack contents from top to bottom (index 0 = top of stack).</param>
+    public void RestoreState(ulong[] stackContents)
+    {
+        ArgumentNullException.ThrowIfNull(stackContents);
+
+        // Clear any pending operations first
+        while (_pendingPushCommands.TryDequeue(out _)) { }
+        while (_pendingPushImmediateCommands.TryDequeue(out _)) { }
+        while (_pendingPopCommands.TryDequeue(out _)) { }
+        while (_pendingPeekCommands.TryDequeue(out _)) { }
+        while (_pendingDupCommands.TryDequeue(out _)) { }
+
+        // Clear current stack
+        _stack.Clear();
+
+        // Push items in reverse order (bottom to top) so snapshot[0] ends up on top
+        for (int i = stackContents.Length - 1; i >= 0; i--)
+        {
+            if (_stack.Count >= _maxStackSize)
+            {
+                _logger.LogWarning("Stack restore overflow: cannot restore all {Count} items (max {Max})",
+                    stackContents.Length, _maxStackSize);
+                break;
+            }
+            _stack.Push(stackContents[i]);
+        }
+
+        _logger.LogInformation("Stack state restored: {Count} items", _stack.Count);
+
+        // Update SP register to reflect restored stack
+        _eventBus.Publish(new RegisterWriteCommand(RegisterId.SP, (ulong)_stack.Count));
+    }
+
     private void ProcessPendingOperations()
     {
         // Process push commands (register source)

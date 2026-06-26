@@ -152,6 +152,24 @@ public sealed class Clock : IObserver<HardwareInterrupt>, IDisposable
         ExecuteCycle();
     }
 
+    /// <summary>
+    /// Restores clock state from a snapshot.
+    /// WARNING: This bypasses the event-driven model and directly mutates internal state.
+    /// Should only be used for deserialization/checkpointing.
+    /// </summary>
+    public void RestoreState(ulong cycleCount, ClockPhase phase, int frequencyHz)
+    {
+        if (frequencyHz <= 0)
+            throw new ArgumentOutOfRangeException(nameof(frequencyHz), "Frequency must be positive");
+
+        _cycleCount = cycleCount;
+        _currentPhase = phase;
+        _frequencyHz = frequencyHz;
+
+        _logger.LogInformation("Clock state restored: cycle={Cycle}, phase={Phase}, freq={Freq}Hz",
+            cycleCount, phase, frequencyHz);
+    }
+
     private async Task RunClockLoop(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)

@@ -66,7 +66,8 @@ public static class CpuStateSerializer
 
     /// <summary>
     /// Restore CPU state to all components.
-    /// NOTE: This only restores data, not pending operations or subscriptions.
+    /// WARNING: This bypasses the event-driven model and directly mutates component state.
+    /// Should only be used for deserialization/checkpointing. Does NOT restore pending operations.
     /// </summary>
     public static void Restore(CpuState state, Clock clock, RegisterFile registerFile, Stack stack, Memory memory)
     {
@@ -83,13 +84,11 @@ public static class CpuStateSerializer
                 $"Memory capacity mismatch: expected {state.MemoryCapacityWords}, got {memory.CapacityWords}");
         }
 
-        // Restore would require internal access to component state
-        // For now, this is a design sketch - actual implementation would need:
-        // - Internal setters or Restore methods on each component
-        // - Or rebuild components from state (preferred for immutability)
-        throw new NotImplementedException(
-            "Restore requires component-level APIs for setting internal state. " +
-            "Consider implementing IRestorable interface on components.");
+        // Restore each component's state
+        clock.RestoreState(state.CycleCount, state.Phase, state.FrequencyHz);
+        registerFile.RestoreState(state.Registers);
+        stack.RestoreState(state.Stack);
+        memory.RestoreState(state.Memory);
     }
 
     /// <summary>

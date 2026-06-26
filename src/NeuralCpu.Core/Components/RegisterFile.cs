@@ -76,6 +76,29 @@ public sealed class RegisterFile : IObserver<ClockPhaseChanged>,
 
     #region Methods
 
+    /// <summary>
+    /// Restores register values from a snapshot.
+    /// WARNING: This bypasses the event-driven model and directly mutates internal state.
+    /// Should only be used for deserialization/checkpointing.
+    /// </summary>
+    public void RestoreState(Dictionary<RegisterId, ulong> registers)
+    {
+        ArgumentNullException.ThrowIfNull(registers);
+
+        // Clear any pending operations first
+        while (_pendingWrites.TryDequeue(out _)) { }
+        while (_pendingWritesWithFlags.TryDequeue(out _)) { }
+        while (_pendingCopies.TryDequeue(out _)) { }
+
+        // Restore each register value
+        foreach (var (regId, value) in registers)
+        {
+            _registers[regId] = value;
+        }
+
+        _logger.LogInformation("RegisterFile state restored: {Count} registers", registers.Count);
+    }
+
     private void ResetRegisters()
     {
         _registers[RegisterId.R0] = DefaultRegisterValue;
