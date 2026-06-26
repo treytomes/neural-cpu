@@ -272,9 +272,9 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [x] Implement TrainStep (Phase 3.1) - single training iteration
 - [x] Add Adam optimizer with learning rate
 - [x] Test: All 8 DPO trainer tests pass
-- [ ] Integrate with TaskRunner (Phase 3.2) - TODO: Next step
-- [ ] Add DPO warmup phase (Phase 3.2) - TODO: Next step
-- [ ] Add metrics tracking (Phase 3.2) - TODO: Next step
+- [x] Integrate with TaskRunner (Phase 3.2) - integration tests written
+- [x] Add DPO warmup phase (Phase 3.2) - tested with invalid rate reduction
+- [x] Add metrics tracking (Phase 3.2) - DPOMetrics record with loss/log probs
 
 ### Milestone 4: Value Encoding
 - [ ] Improve value decoder (Phase 4.1)
