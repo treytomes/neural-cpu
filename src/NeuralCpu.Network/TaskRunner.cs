@@ -64,6 +64,7 @@ public sealed class TaskRunner
 
         // Reset everything
         _eventBus.Publish(new HardwareInterrupt(Clock.INTERRUPT_RESET));
+        _clock.Step(); // Process the RESET before continuing
         _controller.Reset();
         _stateVectorBuilder.Reset();
 
@@ -82,8 +83,8 @@ public sealed class TaskRunner
             // Network decides next action
             var evt = _controller.DecideNextAction(state);
 
-            // Publish control signal
-            _eventBus.Publish(evt);
+            // Publish control signal (use dynamic to preserve concrete type)
+            PublishEvent(evt);
 
             // Record event in history
             _stateVectorBuilder.RecordEvent(EncodeEvent(evt));
@@ -116,6 +117,14 @@ public sealed class TaskRunner
 
     #region Private Methods
 
+    private void PublishEvent(object evt)
+    {
+        // Use dynamic to preserve the concrete type when publishing to the event bus
+        // This ensures subscribers to specific event types receive the events
+        dynamic dynamicEvent = evt;
+        _eventBus.Publish(dynamicEvent);
+    }
+
     private void LoadTaskInput(TaskDefinition task)
     {
         // Write input length
@@ -127,7 +136,10 @@ public sealed class TaskRunner
             _memory[_options.InputBufferAddress + (ulong)i] = task.Input[i];
         }
 
-        _logger.LogDebug("Loaded task input: {Length} items", task.Input.Length);
+        _logger.LogInformation("Loaded task input: {Length} items at addresses Input={InputAddr:X}, Length={LengthAddr:X}",
+            task.Input.Length, _options.InputBufferAddress, _options.InputLengthAddress);
+        _logger.LogInformation("Verify: Memory[{LengthAddr:X}] = {Value}",
+            _options.InputLengthAddress, _memory[_options.InputLengthAddress]);
     }
 
     private TaskResult EvaluateTaskOutput(TaskDefinition task, int cycleCount, bool halted)
