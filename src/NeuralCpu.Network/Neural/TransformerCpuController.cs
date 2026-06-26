@@ -20,6 +20,16 @@ namespace NeuralCpu.Network.Neural;
 /// </summary>
 public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkController, IDisposable
 {
+    #region Constants
+
+    // Action space dimensions (see TODO.md Phase 1.1)
+    private const int EVENT_TYPE_DIM = 33;    // Actionable event types
+    private const int REGISTER_DIM = 8;       // R0-R3, PC, SP, Flags, None
+    private const int VALUE_EMBED_DIM = 256;  // Embedding for 64-bit value
+    private const int ACTION_DIM = EVENT_TYPE_DIM + (REGISTER_DIM * 3) + VALUE_EMBED_DIM; // 313
+
+    #endregion
+
     #region Fields
 
     private readonly Device _device;
@@ -44,6 +54,7 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
 
     // Action decoding
     private readonly Linear _actionDecoder;
+    private readonly Sequential _valueDecoder;
 
     private readonly List<(Tensor state, Tensor action, double reward)> _episodeBuffer;
 
@@ -121,8 +132,15 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
             .WithTopK(2)
             .Build();
 
-        // Action decoder: embedding_dim → action_space_size
-        _actionDecoder = Linear(embeddingDim, actionSpaceSize);
+        // Action decoder: embedding_dim → ACTION_DIM
+        _actionDecoder = Linear(embeddingDim, ACTION_DIM);
+
+        // Value decoder: VALUE_EMBED_DIM → 64 bits
+        _valueDecoder = Sequential(
+            ("fc1", Linear(VALUE_EMBED_DIM, 128)),
+            ("relu", ReLU()),
+            ("fc2", Linear(128, 64)),
+            ("sigmoid", Sigmoid()));
 
         RegisterComponents();
 
@@ -224,7 +242,10 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         return embedded;
     }
 
-    public object DecideNextAction(CpuStateVector state)
+    /// <summary>
+    /// Gets raw action logits from network output (for training/testing).
+    /// </summary>
+    public Tensor GetActionLogits(CpuStateVector state)
     {
         // Encode event history and CPU state separately
         var eventEmbeddings = EncodeEvents(state);      // (1, 64, embedding_dim)
@@ -248,21 +269,219 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         var expertOutput = _moeNetwork.forward(fusedRepresentation);  // (1, embedding_dim)
 
         // Decode to action logits
-        var actionLogits = _actionDecoder.forward(expertOutput);  // (1, action_space_size)
+        return _actionDecoder.forward(expertOutput);  // (1, ACTION_DIM)
+    }
 
-        // Sample or greedy action
-        var action = _isTraining
-            ? SampleAction(actionLogits)
-            : GreedyAction(actionLogits);
+    /// <summary>
+    /// Decodes action logits tensor into EncodedEvent structure.
+    /// </summary>
+    public EncodedEvent DecodeEncodedEvent(Tensor actionLogits)
+    {
+        // actionLogits shape: (1, ACTION_DIM) where ACTION_DIM = 313
+        // Layout: [event_type(33) | reg1(8) | reg2(8) | reg3(8) | value_embed(256)]
 
-        // Store for training
-        if (_isTraining)
+        var logitsFlat = actionLogits.squeeze(0); // (ACTION_DIM,)
+
+        // Extract sections
+        var eventTypeLogits = logitsFlat[TensorIndex.Slice(0, EVENT_TYPE_DIM)];
+        var reg1Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM, EVENT_TYPE_DIM + REGISTER_DIM)];
+        var reg2Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM, EVENT_TYPE_DIM + REGISTER_DIM * 2)];
+        var reg3Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 2, EVENT_TYPE_DIM + REGISTER_DIM * 3)];
+        var valueEmbed = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 3, ACTION_DIM)].unsqueeze(0);
+
+        // Decode event type (argmax over actionable types)
+        var eventTypeIndex = eventTypeLogits.argmax().item<long>();
+        var eventType = MapIndexToEventType((int)eventTypeIndex);
+
+        // Decode registers (argmax, then map from 0-7 to RegisterId including None)
+        var reg1Index = reg1Logits.argmax().item<long>();
+        var reg2Index = reg2Logits.argmax().item<long>();
+        var reg3Index = reg3Logits.argmax().item<long>();
+
+        var reg1 = MapIndexToRegisterId((int)reg1Index);
+        var reg2 = MapIndexToRegisterId((int)reg2Index);
+        var reg3 = MapIndexToRegisterId((int)reg3Index);
+
+        // Decode value (embedding → 64 bits)
+        var value = DecodeValue(valueEmbed);
+
+        return new EncodedEvent(eventType, reg1, reg2, reg3, value);
+    }
+
+    /// <summary>
+    /// Decodes value embedding into 64-bit unsigned integer.
+    /// </summary>
+    private ulong DecodeValue(Tensor valueEmbed)
+    {
+        // valueEmbed shape: (1, VALUE_EMBED_DIM)
+        // Pass through value decoder to get 64 binary predictions
+        var bits = _valueDecoder.forward(valueEmbed).squeeze(0); // (64,)
+
+        // Threshold at 0.5 and pack into ulong
+        ulong result = 0;
+        for (int i = 0; i < 64; i++)
         {
-            _episodeBuffer.Add((fusedRepresentation.detach(), action.detach(), 0.0));
+            float bitValue = bits[i].item<float>();
+            if (bitValue >= 0.5f)
+            {
+                result |= (1UL << i);
+            }
         }
 
-        // Decode action to CPU event
-        return DecodeAction(action);
+        return result;
+    }
+
+    /// <summary>
+    /// Converts EncodedEvent to actual CPU event object.
+    /// </summary>
+    public object? DecodeCpuEvent(EncodedEvent evt)
+    {
+        return evt.Type switch
+        {
+            EventType.None => null,
+
+            // Register operations
+            EventType.RegisterWrite => new RegisterWriteCommand(evt.Reg1, evt.Value),
+            EventType.RegisterCopy => new RegisterCopyCommand(evt.Reg1, evt.Reg2),
+
+            // ALU binary operations
+            EventType.AluAdd => new AluCommand(AluOp.Add, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluSub => new AluCommand(AluOp.Sub, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluMul => new AluCommand(AluOp.Mul, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluDiv => new AluCommand(AluOp.Div, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluAnd => new AluCommand(AluOp.And, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluNand => new AluCommand(AluOp.Nand, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluOr => new AluCommand(AluOp.Or, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluNor => new AluCommand(AluOp.Nor, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluXor => new AluCommand(AluOp.Xor, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluXnor => new AluCommand(AluOp.Xnor, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluShl => new AluCommand(AluOp.Shl, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluShr => new AluCommand(AluOp.Shr, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluSar => new AluCommand(AluOp.Sar, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluRol => new AluCommand(AluOp.Rol, evt.Reg1, evt.Reg2, evt.Reg3),
+            EventType.AluRor => new AluCommand(AluOp.Ror, evt.Reg1, evt.Reg2, evt.Reg3),
+
+            // ALU unary operations
+            EventType.AluNot => new AluUnaryCommand(AluOp.Not, evt.Reg1, evt.Reg2),
+            EventType.AluInc => new AluUnaryCommand(AluOp.Inc, evt.Reg1, evt.Reg2),
+            EventType.AluDec => new AluUnaryCommand(AluOp.Dec, evt.Reg1, evt.Reg2),
+            EventType.AluNeg => new AluUnaryCommand(AluOp.Neg, evt.Reg1, evt.Reg2),
+            EventType.AluAbs => new AluUnaryCommand(AluOp.Abs, evt.Reg1, evt.Reg2),
+            EventType.AluClz => new AluUnaryCommand(AluOp.Clz, evt.Reg1, evt.Reg2),
+
+            // Stack operations
+            EventType.Push => new PushCommand(evt.Reg1),
+            EventType.PushImmediate => new PushImmediateCommand(evt.Value),
+            EventType.Pop => new PopCommand(evt.Reg1),
+            EventType.Peek => new PeekCommand(evt.Reg1),
+            EventType.Dup => new DupCommand(),
+
+            // Memory operations
+            EventType.LoadDirect => new LoadCommand(evt.Value, evt.Reg1),
+            EventType.LoadIndirect => new LoadIndirectCommand(evt.Reg1, evt.Reg2),
+            EventType.StoreDirect => new StoreCommand(evt.Value, evt.Reg1),
+            EventType.StoreIndirect => new StoreIndirectCommand(evt.Reg1, evt.Reg2),
+
+            // Hardware interrupt
+            EventType.HardwareInterrupt => new HardwareInterrupt((byte)(evt.Value & 0xFF)),
+
+            // Observe-only events (network shouldn't emit these)
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Maps action space index (0-32) to actionable EventType.
+    /// </summary>
+    private static EventType MapIndexToEventType(int index)
+    {
+        return index switch
+        {
+            0 => EventType.RegisterWrite,
+            1 => EventType.RegisterCopy,
+            2 => EventType.HardwareInterrupt,
+            3 => EventType.AluAdd,
+            4 => EventType.AluSub,
+            5 => EventType.AluMul,
+            6 => EventType.AluDiv,
+            7 => EventType.AluAnd,
+            8 => EventType.AluNand,
+            9 => EventType.AluOr,
+            10 => EventType.AluNor,
+            11 => EventType.AluXor,
+            12 => EventType.AluXnor,
+            13 => EventType.AluShl,
+            14 => EventType.AluShr,
+            15 => EventType.AluSar,
+            16 => EventType.AluRol,
+            17 => EventType.AluRor,
+            18 => EventType.AluNot,
+            19 => EventType.AluInc,
+            20 => EventType.AluDec,
+            21 => EventType.AluNeg,
+            22 => EventType.AluAbs,
+            23 => EventType.AluClz,
+            24 => EventType.Push,
+            25 => EventType.PushImmediate,
+            26 => EventType.Pop,
+            27 => EventType.Peek,
+            28 => EventType.Dup,
+            29 => EventType.LoadDirect,
+            30 => EventType.LoadIndirect,
+            31 => EventType.StoreDirect,
+            32 => EventType.StoreIndirect,
+            _ => EventType.None
+        };
+    }
+
+    /// <summary>
+    /// Maps register index (0-7) to RegisterId enum (including None at index 0).
+    /// </summary>
+    private static RegisterId MapIndexToRegisterId(int index)
+    {
+        return index switch
+        {
+            0 => RegisterId.None,
+            1 => RegisterId.R0,
+            2 => RegisterId.R1,
+            3 => RegisterId.R2,
+            4 => RegisterId.R3,
+            5 => RegisterId.PC,
+            6 => RegisterId.SP,
+            7 => RegisterId.Flags,
+            _ => RegisterId.None
+        };
+    }
+
+    public object DecideNextAction(CpuStateVector state)
+    {
+        // Get action logits from network
+        var actionLogits = GetActionLogits(state);
+
+        // Decode to EncodedEvent
+        var encodedEvent = DecodeEncodedEvent(actionLogits);
+
+        // Validate event
+        var validation = EventValidationDPO.Validate(encodedEvent);
+
+        // If invalid, correct it (for now, during development)
+        // TODO: In DPO training, we'll use both invalid and corrected versions
+        if (!validation.IsValid)
+        {
+            encodedEvent = EventValidationDPO.Correct(encodedEvent);
+        }
+
+        // Convert to CPU event object
+        var cpuEvent = DecodeCpuEvent(encodedEvent);
+
+        // Store for training (store logits, not sampled action)
+        if (_isTraining)
+        {
+            _episodeBuffer.Add((actionLogits.detach(), actionLogits.detach(), 0.0));
+        }
+
+        // Return CPU event (or null if invalid)
+        return cpuEvent ?? new RegisterWriteCommand(RegisterId.R0, 0); // Fallback: no-op
     }
 
     public void OnEpisodeEnd(bool success, double reward)
@@ -293,23 +512,6 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         return _episodeBuffer.AsReadOnly();
     }
 
-    private Tensor SampleAction(Tensor logits)
-    {
-        var probs = functional.softmax(logits, dim: -1);
-        return multinomial(probs, num_samples: 1);
-    }
-
-    private Tensor GreedyAction(Tensor logits)
-    {
-        return logits.argmax(dim: -1, keepdim: true);
-    }
-
-    private object DecodeAction(Tensor actionTensor)
-    {
-        // TODO: Implement proper action space encoding
-        var actionIndex = actionTensor.item<long>();
-        return new RegisterWriteCommand(RegisterId.R0, (ulong)actionIndex);
-    }
 
     /// <summary>
     /// Saves the entire controller (including MoE network) to a file.

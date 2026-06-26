@@ -14,10 +14,13 @@ Implement structured action space encoding where the network outputs EncodedEven
 
 - [ ] Update `ACTION_DIM` constant to match EncodedEvent structure:
   ```csharp
-  EVENT_TYPE_DIM = 15    // Number of EventType enum values
+  EVENT_TYPE_DIM = 33    // Number of ACTIONABLE EventType values (not all 61 enum values)
+                          // RegisterWrite, RegisterCopy, HardwareInterrupt,
+                          // 15 ALU binary (Add-Ror), 6 ALU unary (Not-Clz),
+                          // 5 Stack (Push-Dup), 4 Memory (LoadDirect-StoreIndirect)
   REGISTER_DIM = 8       // 7 RegisterId values + None
   VALUE_EMBED_DIM = 256  // Embedding for 64-bit value
-  TOTAL = 15 + (8 × 3) + 256 = 295
+  TOTAL = 33 + (8 × 3) + 256 = 313
   ```
 
 - [ ] Create value decoder network:
@@ -245,19 +248,22 @@ Implement structured action space encoding where the network outputs EncodedEven
 
 ## Implementation Checklist
 
-### Milestone 1: Basic Action Decoding
-- [ ] Update action decoder dimensions (Phase 1.1)
-- [ ] Implement DecodeEncodedEvent (Phase 1.2)
-- [ ] Implement DecodeCpuEvent (Phase 2.2)
-- [ ] Update DecideNextAction pipeline (Phase 1.3)
-- [ ] Test: Network can generate EncodedEvents
+### Milestone 1: Basic Action Decoding ✅ COMPLETE
+- [x] Write unit tests (TDD approach)
+- [x] Update action decoder dimensions (Phase 1.1) - ACTION_DIM = 313
+- [x] Implement GetActionLogits method (Phase 1.2)
+- [x] Implement DecodeEncodedEvent (Phase 1.2)
+- [x] Implement DecodeValue helper (Phase 1.2)
+- [x] Implement DecodeCpuEvent (Phase 2.2) - all 33 event types supported
+- [x] Update DecideNextAction pipeline (Phase 1.3)
+- [x] Test: All 9 unit tests pass
 
-### Milestone 2: Validation System
-- [ ] Create EventValidationDPO class (Phase 2.1)
-- [ ] Implement all validation rules (Phase 2.1)
-- [ ] Implement correction logic (Phase 2.1)
-- [ ] Add validation to action pipeline (Phase 1.3)
-- [ ] Test: Validation catches all invalid patterns
+### Milestone 2: Validation System ✅ COMPLETE
+- [x] Create EventValidationDPO class (Phase 2.1)
+- [x] Implement all validation rules (Phase 2.1) - 33 event types covered
+- [x] Implement correction logic (Phase 2.1) - fixes missing/invalid registers
+- [x] Add validation to action pipeline (Phase 1.3) - integrated into DecideNextAction
+- [x] Test: All 22 validation tests pass
 
 ### Milestone 3: DPO Training
 - [ ] Create DPOTrainer class (Phase 3.1)
