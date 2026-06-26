@@ -19,6 +19,7 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Clock _clock;
     private readonly RegisterFile _registerFile;
     private readonly Alu _alu;
+    private readonly Stack _stack;
     private readonly IDisposable _clockSubscription;
     private readonly IDisposable _interruptSubscription;
     private readonly IDisposable _registerSubscription;
@@ -36,15 +37,17 @@ internal sealed class NeuralCpuApp : Window,
     private readonly Label _spLabel;
     private readonly Label _flagsLabel;
     private readonly ListView _eventLog;
+    private readonly ListView _stackView;
 
     private readonly ObservableCollection<string> _eventLogItems = new();
+    private readonly ObservableCollection<string> _stackItems = new();
     private const int MaxEventLogItems = 100;
 
     #endregion
 
     #region Constructors
 
-    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu)
+    public NeuralCpuApp(IEventBus eventBus, Clock clock, RegisterFile registerFile, Alu alu, Stack stack)
     {
         Title = "Neural CPU - Clock Monitor (Esc to quit)";
 
@@ -53,6 +56,7 @@ internal sealed class NeuralCpuApp : Window,
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _registerFile = registerFile ?? throw new ArgumentNullException(nameof(registerFile));
         _alu = alu ?? throw new ArgumentNullException(nameof(alu));
+        _stack = stack ?? throw new ArgumentNullException(nameof(stack));
 
         // Subscribe to events
         _clockSubscription = _eventBus.Subscribe<ClockPhaseChanged>(this);
@@ -365,7 +369,7 @@ internal sealed class NeuralCpuApp : Window,
             X = 0,
             Y = Pos.Bottom(testFrame),
             Width = Dim.Fill(),
-            Height = 6
+            Height = 8
         };
 
         var addButton = new Button()
@@ -485,18 +489,134 @@ internal sealed class NeuralCpuApp : Window,
             LogEvent("ALU: DEC R3-- → R3");
         };
 
-        aluTestFrame.Add(addButton, mulButton, divButton, xorButton, notButton, shlButton, rolButton, aluIncButton, aluDecButton);
-
-        // Create event log
-        var logFrame = new FrameView()
+        var negButton = new Button()
         {
-            Title = "Event Log",
+            Text = "NEG R0→R1",
+            X = 1,
+            Y = 4,
+            ColorScheme = buttonColorScheme
+        };
+        negButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Neg, RegisterId.R0, RegisterId.R1));
+            LogEvent("ALU: NEG R0 → R1");
+        };
+
+        var absButton = new Button()
+        {
+            Text = "ABS R1→R2",
+            X = Pos.Right(negButton) + 2,
+            Y = 4,
+            ColorScheme = buttonColorScheme
+        };
+        absButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Abs, RegisterId.R1, RegisterId.R2));
+            LogEvent("ALU: ABS R1 → R2");
+        };
+
+        var clzButton = new Button()
+        {
+            Text = "CLZ R0→R3",
+            X = Pos.Right(absButton) + 2,
+            Y = 4,
+            ColorScheme = buttonColorScheme
+        };
+        clzButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new AluUnaryCommand(AluOp.Clz, RegisterId.R0, RegisterId.R3));
+            LogEvent("ALU: CLZ R0 → R3");
+        };
+
+        aluTestFrame.Add(addButton, mulButton, divButton, xorButton, notButton, shlButton, rolButton, aluIncButton, aluDecButton, negButton, absButton, clzButton);
+
+        // Create stack test panel
+        var stackTestFrame = new FrameView()
+        {
+            Title = "Stack Tests",
             X = 0,
             Y = Pos.Bottom(aluTestFrame),
+            Width = Dim.Fill(),
+            Height = 4
+        };
+
+        var pushR0Button = new Button()
+        {
+            Text = "PUSH R0",
+            X = 1,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        pushR0Button.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new PushCommand(RegisterId.R0));
+            LogEvent("STACK: PUSH R0");
+        };
+
+        var pushImmButton = new Button()
+        {
+            Text = "PUSH 0x1234",
+            X = Pos.Right(pushR0Button) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        pushImmButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new PushImmediateCommand(0x1234));
+            LogEvent("STACK: PUSH immediate 0x1234");
+        };
+
+        var popR1Button = new Button()
+        {
+            Text = "POP R1",
+            X = Pos.Right(pushImmButton) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        popR1Button.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new PopCommand(RegisterId.R1));
+            LogEvent("STACK: POP → R1");
+        };
+
+        var peekR2Button = new Button()
+        {
+            Text = "PEEK R2",
+            X = Pos.Right(popR1Button) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        peekR2Button.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new PeekCommand(RegisterId.R2));
+            LogEvent("STACK: PEEK → R2");
+        };
+
+        var dupButton = new Button()
+        {
+            Text = "DUP",
+            X = Pos.Right(peekR2Button) + 2,
+            Y = 0,
+            ColorScheme = buttonColorScheme
+        };
+        dupButton.Accepting += (s, e) =>
+        {
+            _eventBus.Publish(new DupCommand());
+            LogEvent("STACK: DUP top value");
+        };
+
+        stackTestFrame.Add(pushR0Button, pushImmButton, popR1Button, peekR2Button, dupButton);
+
+        // Create TabView for logs and stack display
+        var tabView = new TabView()
+        {
+            X = 0,
+            Y = Pos.Bottom(stackTestFrame),
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
 
+        // Event Log tab (ListView handles scrolling automatically)
         _eventLog = new ListView()
         {
             X = 0,
@@ -508,19 +628,55 @@ internal sealed class NeuralCpuApp : Window,
         };
         _eventLog.SetSource(_eventLogItems);
 
-        // Add a simple vertical scrollbar indicator
-        var scrollIndicator = new Label()
+        var eventLogTab = new Tab()
         {
-            X = Pos.AnchorEnd(1),
-            Y = 0,
-            Width = 1,
-            Height = Dim.Fill(),
-            Text = "│"
+            DisplayText = "Event Log",
+            View = _eventLog
         };
 
-        logFrame.Add(_eventLog, scrollIndicator);
+        // Stack display tab (ListView handles scrolling automatically)
+        _stackView = new ListView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            AllowsMarking = false,
+            AllowsMultipleSelection = false
+        };
+        _stackView.SetSource(_stackItems);
 
-        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, logFrame);
+        var stackTab = new Tab()
+        {
+            DisplayText = "Stack",
+            View = _stackView
+        };
+
+        // Add tabs to TabView
+        tabView.AddTab(eventLogTab, false);
+        tabView.AddTab(stackTab, false);
+
+        // Listen for tab changes to update stack display
+        tabView.SelectedTabChanged += (s, e) =>
+        {
+            if (tabView.SelectedTab == stackTab)
+            {
+                UpdateStackDisplay();
+            }
+        };
+
+        // Also update stack display periodically (every 100ms) when on stack tab
+        var stackUpdateTimer = new System.Timers.Timer(100);
+        stackUpdateTimer.Elapsed += (s, e) =>
+        {
+            if (tabView.SelectedTab == stackTab)
+            {
+                UpdateStackDisplay();
+            }
+        };
+        stackUpdateTimer.Start();
+
+        Add(statusFrame, registerFrame, controlFrame, testFrame, aluTestFrame, stackTestFrame, tabView);
 
         // Hook into window closing to ensure cleanup
         Closing += OnClosing;
@@ -584,6 +740,63 @@ internal sealed class NeuralCpuApp : Window,
             {
                 _eventLog.SelectedItem = _eventLogItems.Count - 1;
                 _eventLog.EnsureSelectedItemVisible();
+            }
+        });
+    }
+
+    private void UpdateStackDisplay()
+    {
+        // Build the new list outside the UI thread to avoid race conditions
+        var newItems = new List<string>();
+
+        if (_stack.Count == 0)
+        {
+            newItems.Add("(Stack is empty)");
+        }
+        else
+        {
+            newItems.Add($"Stack depth: {_stack.Count} / 65536");
+            newItems.Add(" ");  // Use space instead of empty string
+            newItems.Add("Index  Value");
+            newItems.Add("-----  ----------------");
+
+            // Get stack snapshot (top to bottom)
+            var snapshot = _stack.GetSnapshot();
+
+            // Show top 50 items (most recent pushes first)
+            var itemsToShow = Math.Min(snapshot.Length, 50);
+            for (int i = 0; i < itemsToShow; i++)
+            {
+                newItems.Add($"{i,5}  0x{snapshot[i]:X16}");
+            }
+
+            if (snapshot.Length > 50)
+            {
+                newItems.Add(" ");  // Use space instead of empty string
+                newItems.Add($"... and {snapshot.Length - 50} more items");
+            }
+        }
+
+        // Now update the observable collection atomically on the UI thread
+        Application.Invoke(() =>
+        {
+            // Replace items one by one to avoid Clear() causing ListView confusion
+            for (int i = 0; i < newItems.Count; i++)
+            {
+                if (i < _stackItems.Count)
+                {
+                    _stackItems[i] = newItems[i];
+                }
+                else
+                {
+                    _stackItems.Add(newItems[i]);
+                }
+            }
+
+            // Remove any extra items if new list is shorter
+            while (_stackItems.Count > newItems.Count)
+            {
+                _stackItems.RemoveAt(_stackItems.Count - 1);
             }
         });
     }

@@ -11,7 +11,7 @@ namespace NeuralCpu.Core;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers core Neural CPU services including the event bus, clock, register file, and ALU.
+    /// Registers core Neural CPU services including the event bus, clock, register file, ALU, and stack.
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <returns>The service collection for chaining</returns>
@@ -29,10 +29,14 @@ public static class ServiceCollectionExtensions
         // Register ALU as singleton
         services.AddSingleton<Alu>();
 
+        // Register stack as singleton
+        services.AddSingleton<Components.Stack>();
+
         // Register hosted services for lifecycle management
         services.AddHostedService<ClockHostedService>();
         services.AddHostedService<RegisterFileHostedService>();
         services.AddHostedService<AluHostedService>();
+        services.AddHostedService<StackHostedService>();
 
         return services;
     }

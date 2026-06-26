@@ -94,53 +94,89 @@ public sealed class RegisterFile : IObserver<ClockPhaseChanged>,
         // Process regular writes (no flag updates)
         while (_pendingWrites.TryDequeue(out var write))
         {
+            // PC is read-only (auto-increments as time counter)
+            if (write.RegisterId == RegisterId.PC)
+            {
+                _logger.LogWarning("Attempted write to PC ignored (PC is read-only time counter)");
+                continue;
+            }
+
             var oldValue = _registers[write.RegisterId];
-            _registers[write.RegisterId] = write.Value;
 
-            _logger.LogDebug("Register {RegisterId} changed: 0x{Old:X16} -> 0x{New:X16}",
-                write.RegisterId, oldValue, write.Value);
+            // Only write and publish if value actually changed
+            if (oldValue != write.Value)
+            {
+                _registers[write.RegisterId] = write.Value;
 
-            _eventBus.Publish(new RegisterChanged(
-                write.RegisterId,
-                oldValue,
-                write.Value,
-                cycleCount));
+                _logger.LogDebug("Register {RegisterId} changed: 0x{Old:X16} -> 0x{New:X16}",
+                    write.RegisterId, oldValue, write.Value);
+
+                _eventBus.Publish(new RegisterChanged(
+                    write.RegisterId,
+                    oldValue,
+                    write.Value,
+                    cycleCount));
+            }
         }
 
         // Process writes with flag updates
         while (_pendingWritesWithFlags.TryDequeue(out var write))
         {
+            // PC is read-only (auto-increments as time counter)
+            if (write.RegisterId == RegisterId.PC)
+            {
+                _logger.LogWarning("Attempted write (with flags) to PC ignored (PC is read-only time counter)");
+                continue;
+            }
+
             var oldValue = _registers[write.RegisterId];
-            _registers[write.RegisterId] = write.Value;
 
-            _logger.LogDebug("Register {RegisterId} changed (with flags): 0x{Old:X16} -> 0x{New:X16}",
-                write.RegisterId, oldValue, write.Value);
+            // Only write and publish if value actually changed
+            if (oldValue != write.Value)
+            {
+                _registers[write.RegisterId] = write.Value;
 
-            _eventBus.Publish(new RegisterChanged(
-                write.RegisterId,
-                oldValue,
-                write.Value,
-                cycleCount));
+                _logger.LogDebug("Register {RegisterId} changed (with flags): 0x{Old:X16} -> 0x{New:X16}",
+                    write.RegisterId, oldValue, write.Value);
 
-            // Update flags based on the written value
+                _eventBus.Publish(new RegisterChanged(
+                    write.RegisterId,
+                    oldValue,
+                    write.Value,
+                    cycleCount));
+            }
+
+            // Always update flags based on the written value (even if register didn't change)
             UpdateFlags(write.Value);
         }
 
         // Process register copy operations
         while (_pendingCopies.TryDequeue(out var copy))
         {
+            // PC is read-only (auto-increments as time counter)
+            if (copy.DestinationRegister == RegisterId.PC)
+            {
+                _logger.LogWarning("Attempted copy to PC ignored (PC is read-only time counter)");
+                continue;
+            }
+
             var sourceValue = _registers[copy.SourceRegister];
             var oldDestValue = _registers[copy.DestinationRegister];
-            _registers[copy.DestinationRegister] = sourceValue;
 
-            _logger.LogDebug("Register copy: {Source} (0x{Value:X16}) -> {Dest}",
-                copy.SourceRegister, sourceValue, copy.DestinationRegister);
+            // Only copy and publish if value actually changed
+            if (oldDestValue != sourceValue)
+            {
+                _registers[copy.DestinationRegister] = sourceValue;
 
-            _eventBus.Publish(new RegisterChanged(
-                copy.DestinationRegister,
-                oldDestValue,
-                sourceValue,
-                cycleCount));
+                _logger.LogDebug("Register copy: {Source} (0x{Value:X16}) -> {Dest}",
+                    copy.SourceRegister, sourceValue, copy.DestinationRegister);
+
+                _eventBus.Publish(new RegisterChanged(
+                    copy.DestinationRegister,
+                    oldDestValue,
+                    sourceValue,
+                    cycleCount));
+            }
         }
 
         // Auto-increment PC every cycle (gives network sense of time)

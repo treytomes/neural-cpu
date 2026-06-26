@@ -264,6 +264,52 @@ public sealed class Alu : IObserver<ClockPhaseChanged>,
                 flags = ComputeArithmeticFlags(value, 1, result, isSubtraction: true);
                 break;
 
+            case AluOp.Neg:
+                result = (~value) + 1;  // Two's complement negation
+                flags = ComputeBasicFlags(result);
+                // Overflow if negating most negative value (stays the same)
+                if (value == 0x8000_0000_0000_0000)
+                {
+                    flags = flags.SetFlag(CpuFlags.Overflow, true);
+                }
+                break;
+
+            case AluOp.Abs:
+                {
+                    var isNegative = ((long)value) < 0;
+                    result = isNegative ? (~value) + 1 : value;
+                    flags = ComputeBasicFlags(result);
+                    // Overflow if absolute value of most negative value
+                    if (value == 0x8000_0000_0000_0000)
+                    {
+                        flags = flags.SetFlag(CpuFlags.Overflow, true);
+                    }
+                }
+                break;
+
+            case AluOp.Clz:
+                {
+                    // Count leading zeros
+                    var count = 0;
+                    if (value == 0)
+                    {
+                        count = 64;
+                    }
+                    else
+                    {
+                        // Find position of highest set bit
+                        var temp = value;
+                        while ((temp & 0x8000_0000_0000_0000) == 0)
+                        {
+                            count++;
+                            temp <<= 1;
+                        }
+                    }
+                    result = (ulong)count;
+                    flags = ComputeBasicFlags(result);
+                }
+                break;
+
             default:
                 _logger.LogWarning("Unknown unary ALU operation: {Op}", op);
                 break;

@@ -23,7 +23,13 @@ public enum CpuFlags : ulong
     Overflow = 1 << 3,
 
     /// <summary>Divide by zero flag - set when division by zero is attempted.</summary>
-    DivideByZero = 1 << 4
+    DivideByZero = 1 << 4,
+
+    /// <summary>Stack underflow flag - set when popping or peeking from an empty stack.</summary>
+    StackUnderflow = 1 << 5,
+
+    /// <summary>Stack overflow flag - set when pushing to a full stack.</summary>
+    StackOverflow = 1 << 6
 }
 
 /// <summary>
@@ -51,7 +57,7 @@ public static class CpuFlagsExtensions
     }
 
     /// <summary>
-    /// Gets a formatted string representation of the flags (e.g., "ZCNOD" or "z-n--").
+    /// Gets a formatted string representation of the flags (e.g., "ZCNODSU" or "z-n----").
     /// </summary>
     public static string ToFlagString(this ulong flagsValue)
     {
@@ -59,6 +65,8 @@ public static class CpuFlagsExtensions
                $"{(flagsValue.HasFlag(CpuFlags.Carry) ? 'C' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.Negative) ? 'N' : '-')}" +
                $"{(flagsValue.HasFlag(CpuFlags.Overflow) ? 'O' : '-')}" +
-               $"{(flagsValue.HasFlag(CpuFlags.DivideByZero) ? 'D' : '-')}";
+               $"{(flagsValue.HasFlag(CpuFlags.DivideByZero) ? 'D' : '-')}" +
+               $"{(flagsValue.HasFlag(CpuFlags.StackUnderflow) ? 'S' : '-')}" +
+               $"{(flagsValue.HasFlag(CpuFlags.StackOverflow) ? 'U' : '-')}";
     }
 }

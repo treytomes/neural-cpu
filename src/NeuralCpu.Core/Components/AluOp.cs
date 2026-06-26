@@ -22,6 +22,11 @@ public enum AluOp
     Xor,
     Xnor,
 
+    // Additional unary operations
+    Neg,        // Two's complement negate
+    Abs,        // Absolute value
+    Clz,        // Count leading zeros
+
     // Shift operations
     Shl,        // Shift left (logical)
     Shr,        // Shift right (logical)
