@@ -474,10 +474,12 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         // Convert to CPU event object
         var cpuEvent = DecodeCpuEvent(encodedEvent);
 
-        // Store for training (store logits, not sampled action)
+        // Store for training (keep gradients for backpropagation)
         if (_isTraining)
         {
-            _episodeBuffer.Add((actionLogits.detach(), actionLogits.detach(), 0.0));
+            // Store actionLogits WITH gradients (don't detach)
+            // The computation graph will be retained for policy gradient training
+            _episodeBuffer.Add((actionLogits.alias(), actionLogits.alias(), 0.0));
         }
 
         // Return CPU event (or null if invalid)

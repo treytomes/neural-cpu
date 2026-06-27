@@ -287,8 +287,11 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [x] Create TrainingOrchestrator class (coordinates DPO + task training)
 - [x] Write integration tests (Phase 5.2) - EndToEndTrainingTests (8 tests)
 - [x] **CRITICAL**: Implement real policy gradient backpropagation - PolicyGradientTrainer (9 tests)
+- [x] **CRITICAL**: Fix gradient flow - removed .detach() from episode buffer storage
+- [x] Debug training - identified root cause: Echo task too hard for random init (PolicyLoss=-0.0, Output Length=0)
+- [ ] **BLOCKER**: Implement curriculum learning or reward shaping (random network never writes to OUTPUT_BUFFER)
 - [ ] Add visualization/debugging tools (Phase 5.3)
-- [ ] Run Echo/Increment/Reverse tasks with neural controller (actual convergence)
+- [ ] Run simpler tasks first (register operations, no memory addresses)
 - [ ] Measure: Task success rate, invalid event rate, training time
 
 ### Milestone 6: Network as Async Component

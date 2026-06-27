@@ -55,6 +55,83 @@ public sealed class PolicyGradientTrainer : IDisposable
     #region Episode Management
 
     /// <summary>
+    /// Trains on a complete episode trajectory from the controller's buffer.
+    /// This is the main entry point for policy gradient training.
+    /// </summary>
+    /// <param name="episodeBuffer">Episode buffer from TransformerCpuController containing (state, actionLogits, reward) tuples.</param>
+    /// <param name="terminalReward">Final reward for the episode (assigned to all steps).</param>
+    /// <returns>Training metrics.</returns>
+    public PolicyGradientMetrics TrainOnEpisode(
+        IReadOnlyList<(Tensor state, Tensor action, double reward)> episodeBuffer,
+        double terminalReward)
+    {
+        if (episodeBuffer.Count == 0)
+        {
+            return new PolicyGradientMetrics(
+                PolicyLoss: 0.0,
+                AverageReturn: 0.0,
+                StepCount: 0);
+        }
+
+        // Build rewards array (simple credit assignment: assign terminal reward to all steps)
+        var rewards = new double[episodeBuffer.Count];
+        for (int i = 0; i < episodeBuffer.Count; i++)
+        {
+            rewards[i] = terminalReward;
+        }
+
+        // Compute discounted returns
+        var returns = ComputeDiscountedReturns(rewards, _gamma);
+
+        // Compute baseline (mean return)
+        var baseline = returns.Average();
+
+        // Compute advantages
+        var advantages = returns.Select(r => r - baseline).ToArray();
+        var advantagesTensor = tensor(advantages, dtype: ScalarType.Float32, device: _device);
+
+        // Compute log probabilities for each action in the episode
+        var logProbs = new List<Tensor>();
+        for (int t = 0; t < episodeBuffer.Count; t++)
+        {
+            var (_, actionLogits, _) = episodeBuffer[t];
+            var decodedEvent = _controller.DecodeEncodedEvent(actionLogits);
+            var logProb = ComputeLogProbTensor(actionLogits, decodedEvent);
+            logProbs.Add(logProb);
+        }
+
+        // Stack log probs into tensor: (num_steps,)
+        var logProbsTensor = stack(logProbs.ToArray(), dim: 0);
+
+        // Policy gradient loss: -∑_t log π(a_t|s_t) * A_t
+        var loss = -(logProbsTensor * advantagesTensor).sum();
+
+        // Zero gradients
+        _optimizer.zero_grad();
+
+        // Backward pass
+        loss.backward();
+
+        // Update parameters
+        _optimizer.step();
+
+        // Get loss value
+        var lossValue = loss.item<float>();
+
+        // Cleanup
+        foreach (var lp in logProbs)
+            lp.Dispose();
+        advantagesTensor.Dispose();
+        logProbsTensor.Dispose();
+        loss.Dispose();
+
+        return new PolicyGradientMetrics(
+            PolicyLoss: lossValue,
+            AverageReturn: returns.Average(),
+            StepCount: episodeBuffer.Count);
+    }
+
+    /// <summary>
     /// Begins a new episode, clearing the episode buffer.
     /// </summary>
     public void BeginEpisode()

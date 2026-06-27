@@ -115,26 +115,15 @@ public sealed class TrainingOrchestrator
 
         for (int ep = 0; ep < episodes; ep++)
         {
-            // Begin new episode
-            _policyGradientTrainer.BeginEpisode();
-
             // Run episode with TaskRunner (network is in training mode, records states/actions)
             var result = _taskRunner.RunEpisode(task, maxCyclesPerEpisode);
 
             // Get episode buffer from controller
             var episodeBuffer = _controller.GetEpisodeBuffer();
 
-            // Transfer data from controller's buffer to policy gradient trainer
-            // Assign terminal reward to all steps (simple credit assignment)
-            foreach (var (state, action, _) in episodeBuffer)
-            {
-                // Convert tensor state to CpuStateVector (simplified - use zeros for now)
-                var stateVector = CreateRandomStateVector();
-                _policyGradientTrainer.RecordStep(stateVector, result.Reward);
-            }
-
-            // Run policy gradient training step
-            var pgMetrics = _policyGradientTrainer.EndEpisode();
+            // Train on episode trajectory using policy gradient
+            // Policy gradient trainer will compute returns and backpropagate
+            var pgMetrics = _policyGradientTrainer.TrainOnEpisode(episodeBuffer, result.Reward);
 
             metrics[ep] = new TaskTrainingMetrics(
                 EpisodeNumber: ep,
@@ -148,6 +137,9 @@ public sealed class TrainingOrchestrator
                 _logger.LogInformation("Episode {Episode}/{Total}: Reward={Reward:F2}, Loss={Loss:F4}, Cycles={Cycles}",
                     ep, episodes, result.Reward, pgMetrics.PolicyLoss, result.CycleCount);
             }
+
+            // Clear controller buffer for next episode
+            _controller.Reset();
         }
 
         _logger.LogInformation("Task training complete. Final reward: {Reward:F2}", metrics[^1].Reward);
