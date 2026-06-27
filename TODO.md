@@ -285,9 +285,10 @@ Implement structured action space encoding where the network outputs EncodedEven
 ### Milestone 5: End-to-End Validation
 - [x] Write comprehensive unit tests (Phase 5.1) - TrainingOrchestratorTests (8 tests)
 - [x] Create TrainingOrchestrator class (coordinates DPO + task training)
-- [ ] Write integration tests (Phase 5.2) - actual training runs
+- [x] Write integration tests (Phase 5.2) - EndToEndTrainingTests (8 tests)
+- [ ] **CRITICAL**: Implement real policy gradient backpropagation (currently placeholder)
 - [ ] Add visualization/debugging tools (Phase 5.3)
-- [ ] Run Echo/Increment/Reverse tasks with neural controller
+- [ ] Run Echo/Increment/Reverse tasks with neural controller (actual convergence)
 - [ ] Measure: Task success rate, invalid event rate, training time
 
 ### Milestone 6: Network as Async Component

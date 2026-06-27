@@ -5,6 +5,7 @@
         "Autoencoder",
         "autoregressive",
         "Backpropagate",
+        "backpropagation",
         "bottlenecked",
         "checkpointing",
         "CUDA",
