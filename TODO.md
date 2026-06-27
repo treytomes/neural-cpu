@@ -427,13 +427,22 @@ Network: Observes response in next state vector
   - Fix: Added `PublishDynamic(object action)` helper that uses reflection to call `Publish<T>` with the runtime type
   - Impact: All components now correctly receive events from mock controllers
 
-- [ ] Integrate with PolicyGradientTrainer for actual training
-- [ ] Train 200 episodes per task
+- [x] Integrate with PolicyGradientTrainer for actual training
+  - Created MotorSkillsTrainer: orchestrates training for all 5 tasks
+  - Created MotorSkillsTrainingProgram: console entry point
+  - Integrates BasicMotorSkillsTask episode loops with PolicyGradientTrainer
+  - Logs progress (every 20 episodes) and computes success metrics
+
+- [ ] Train 200 episodes per task (ready to run)
 - [ ] Measure: Success rate per task, cycles to first success
 
 **Expected outcome**: Network masters individual components in isolation.
 
-**Commit**: 9129c8d - Fixed EventBus type matching, unblocked Milestone 5.5.3
+**Commits**: 
+- 9129c8d - Fixed EventBus type matching
+- 8162dd0 - Added MotorSkillsTrainer integration
+
+**Next**: Run actual training with `MotorSkillsTrainingProgram.Run(loggerFactory)`
 
 #### Phase 5.5.4: Coordination (Multi-Step Sequences)
 - [ ] Create `RegisterCopyTask`: Copy any register to another
