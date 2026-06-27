@@ -301,11 +301,11 @@ See Milestone 5.5 for developmental learning approach.
 **Goal**: Implement developmental learning phases where network learns CPU dynamics before task-solving.
 **Philosophy**: Like a human learning motor control, the network needs to discover its "body schema" - how control signals affect CPU state.
 
-#### Phase 5.5.1: Input/Output Components (Sensory Organs)
+#### Phase 5.5.1: Input/Output Components (Sensory Organs) ✅ COMPLETE
 
 **Architecture**: Device Registry pattern supporting multiple I/O devices (0-15)
 
-- [ ] Create `IInputDevice` interface:
+- [x] Create `IInputDevice` interface:
   ```csharp
   public interface IInputDevice
   {
@@ -316,7 +316,7 @@ See Milestone 5.5 for developmental learning approach.
   }
   ```
 
-- [ ] Create `IOutputDevice` interface:
+- [x] Create `IOutputDevice` interface:
   ```csharp
   public interface IOutputDevice
   {
@@ -327,7 +327,7 @@ See Milestone 5.5 for developmental learning approach.
   }
   ```
 
-- [ ] Create `DeviceRegistry` component:
+- [x] Create `DeviceRegistry` component:
   - Manages multiple input/output devices
   - Subscribes to `InputReadRequest(deviceId)` events
   - Publishes `InputReadResponse(deviceId, value, hasData)` events
@@ -335,20 +335,20 @@ See Milestone 5.5 for developmental learning approach.
   - Publishes `OutputWriteAcknowledged(deviceId)` events
   - Publishes `DeviceDiscoveredEvent(deviceId, type, name)` when network first accesses a device
   
-- [ ] Create `TaskInputDevice` implementation:
+- [x] Create `TaskInputDevice` implementation:
   - DeviceId = 0 (primary task input)
   - Holds input buffer loaded at episode start
   - Sequential read (FIFO)
   
-- [ ] Create `TaskOutputDevice` implementation:
+- [x] Create `TaskOutputDevice` implementation:
   - DeviceId = 0 (primary task output)
   - Buffers output values in order
   - Used for reward computation
 
-- [ ] Update `EncodedEvent` and action decoder:
+- [x] Update `EncodedEvent` and action decoder:
   - Add `DeviceId` field to InputRead and OutputWrite events
-  - Action space: `[EventType(33), Reg1-3(24), DeviceId(16), Value(256)]`
-  - Total: 33 + 24 + 16 + 256 = 329 dimensions (was 313)
+  - Action space: `[EventType(35), Reg1-3(24), DeviceId(16), Value(256)]`
+  - Total: 35 + 24 + 16 + 256 = 331 dimensions (was 313, note: 35 not 33 due to InputRead+OutputWrite)
 
 - [ ] Update CPU architecture diagram in CLAUDE.md:
   - Show DeviceRegistry as peer to RegisterFile, ALU, Stack, Memory
@@ -379,55 +379,61 @@ DeviceRegistry: Publishes InputReadResponse(deviceId: 0, value: 42, hasData: tru
 Network: Observes response in next state vector
 ```
 
-#### Phase 5.5.2: Body Discovery (Intrinsic Motivation)
-- [ ] Create `BodyDiscoveryTask` with intrinsic rewards:
+#### Phase 5.5.2: Body Discovery (Intrinsic Motivation) ✅ COMPLETE
+
+- [x] Create `BodyDiscoveryTask` with intrinsic rewards:
   - +0.1 for each register change (discover RegisterWrite)
   - +0.2 for each stack operation (discover Push/Pop)
   - +0.3 for each memory write (discover Store)
+  - +0.4 for each device I/O access (discover InputRead/OutputWrite)
   - +0.5 for discovering new event type (encourage exploration)
+  - +0.01 per register change, +0.02 per stack size change (state observation bonus)
   - No extrinsic task goal - just explore and learn cause-effect
   
-- [ ] Implement `IntrinsicRewardTracker`:
+- [x] Implement `IntrinsicRewardTracker`:
   - Tracks which event types have been discovered
   - Tracks state change diversity (encourage varied outcomes)
-  - Diminishing returns for repeated discoveries
+  - Diminishing returns after 10 uses: reward / sqrt(count - threshold)
+  - `GetStats()` for monitoring: coverage, most-used event, total actions
   
-- [ ] Train for 1000 episodes on BodyDiscovery
+- [x] Unit tests: 10 comprehensive tests for IntrinsicRewardTracker
+  
+- [ ] Integrate with PolicyGradientTrainer for actual training
+- [ ] Train for 500-2000 episodes on BodyDiscovery (until 80% coverage or plateau)
 - [ ] Measure: Event type diversity, state change rate, exploration coverage
 
-**Expected outcome**: Network learns "RegisterWrite changes registers", "Push grows stack", etc.
+**Expected outcome**: Network learns "RegisterWrite changes registers", "Push grows stack", "InputRead gets values from device 0", etc.
 
-#### Phase 5.5.3: Basic Motor Skills (Component Mastery)
-- [ ] Create `RegisterActivationTask`: Make any register non-zero
-  - Reward: 1.0 if any R0-R3 != 0
-  - Tests: Can network discover RegisterWrite event?
-  
-- [ ] Create `RegisterChangeTask`: Make any register change from initial value
-  - Reward: 1.0 if any register changed
-  - Tests: Can network generate valid RegisterWrite with non-zero value?
-  
-- [ ] Create `StackGrowthTask`: Increase stack size
-  - Reward: 1.0 if stack.Count > 0
-  - Tests: Can network discover Push event?
-  
-- [ ] Create `ALUActivationTask`: Perform any ALU operation
-  - Reward: 1.0 if any ALU operation executed
-  - Tests: Can network emit valid ALU command?
+**Status**: Infrastructure complete (BodyDiscoveryTask + IntrinsicRewardTracker), training integration pending.
 
-- [ ] Create `InputReadTask`: Read value from any input device
-  - Reward: 1.0 if InputReadRequest was issued to any deviceId
-  - Tests: Can network discover DeviceRegistry component and input operations?
-  - Stretch: +0.5 bonus for discovering multiple input devices (if present)
+#### Phase 5.5.3: Basic Motor Skills (Component Mastery) 🔨 PARTIAL (BLOCKED)
 
-- [ ] Create `OutputWriteTask`: Write any value to any output device
-  - Reward: 1.0 if OutputWriteCommand was issued to any deviceId
-  - Tests: Can network discover DeviceRegistry component and output operations?
-  - Stretch: +0.5 bonus for discovering multiple output devices (if present)
+**Status**: Framework complete, test synchronization issues blocking completion.
 
+- [x] Create BasicMotorSkillsTask framework with 5 tasks:
+  - RegisterActivationTask: Make any R0-R3 register non-zero
+  - StackGrowthTask: Increase stack size (SP > 0)
+  - ALUActivationTask: Execute any ALU operation (Flags register changes)
+  - InputReadTask: Issue InputReadRequest to device 0
+  - OutputWriteTask: Issue OutputWriteCommand to device 0
+
+- [x] Unit tests: 9 tests created
+  - 3 passing (no-op failure scenarios)
+  - 6 failing (success scenarios - timing/synchronization issue)
+
+- [ ] **BLOCKER**: Fix test synchronization issues
+  - RegisterWriteCommand executes on clock rising edge
+  - Tests may not be properly coordinating event publish with clock Step()
+  - Need to investigate timing between action publish and component state update
+  - Compare with working TaskRunner synchronization pattern
+
+- [ ] Integrate with PolicyGradientTrainer for actual training
 - [ ] Train 200 episodes per task
 - [ ] Measure: Success rate per task, cycles to first success
 
 **Expected outcome**: Network masters individual components in isolation.
+
+**Blocking issue**: Event timing in test harness needs investigation before training integration.
 
 #### Phase 5.5.4: Coordination (Multi-Step Sequences)
 - [ ] Create `RegisterCopyTask`: Copy any register to another
