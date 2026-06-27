@@ -22,6 +22,7 @@
         "Nand",
         "Neumann",
         "probs",
+        "Regs",
         "relu",
         "roundtripped",
         "Serilog",
