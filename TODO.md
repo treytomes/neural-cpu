@@ -286,7 +286,7 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [x] Write comprehensive unit tests (Phase 5.1) - TrainingOrchestratorTests (8 tests)
 - [x] Create TrainingOrchestrator class (coordinates DPO + task training)
 - [x] Write integration tests (Phase 5.2) - EndToEndTrainingTests (8 tests)
-- [ ] **CRITICAL**: Implement real policy gradient backpropagation (currently placeholder)
+- [x] **CRITICAL**: Implement real policy gradient backpropagation - PolicyGradientTrainer (9 tests)
 - [ ] Add visualization/debugging tools (Phase 5.3)
 - [ ] Run Echo/Increment/Reverse tasks with neural controller (actual convergence)
 - [ ] Measure: Task success rate, invalid event rate, training time
