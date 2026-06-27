@@ -289,6 +289,68 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [ ] Run Echo/Increment/Reverse tasks with neural controller
 - [ ] Measure: Task success rate, invalid event rate, training time
 
+### Milestone 6: Network as Async Component
+**Goal**: Implement network as asynchronous hosted service, aligned with event-driven microkernel architecture.
+
+#### Phase 6.1: NetworkControllerService Implementation
+- [ ] Create `NetworkControllerService : IHostedService, IObserver<ClockPhaseChanged>`
+- [ ] Subscribe to `ClockPhaseChanged` events in `StartAsync`
+- [ ] Implement `OnNext(ClockPhaseChanged)` to:
+  - Build state vector on rising edge
+  - Decide next action via controller
+  - Publish control signal to event bus
+- [ ] Implement proper cleanup in `StopAsync` (unsubscribe, dispose)
+- [ ] Run network inference on background task with `CancellationToken`
+
+#### Phase 6.2: Execution Mode Abstraction
+- [ ] Define `NetworkExecutionMode` enum: `{ Synchronous, Asynchronous }`
+- [ ] Add mode parameter to network controller configuration
+- [ ] **Synchronous Mode**: Current TaskRunner behavior (training)
+  - Direct method calls in TaskRunner loop
+  - Deterministic episode execution
+  - Full control over timing for gradient computation
+- [ ] **Asynchronous Mode**: Event-driven behavior (inference/deployment)
+  - Network reacts to clock events independently
+  - No TaskRunner orchestration
+  - Continuous operation as hosted service
+
+#### Phase 6.3: Integration with Hosting Infrastructure
+- [ ] Register `NetworkControllerService` in `ServiceCollectionExtensions.AddNeuralCpu()`
+- [ ] Add configuration option to enable/disable async mode
+- [ ] Ensure network service starts/stops with other CPU components
+- [ ] Test: Network service responds to clock events without TaskRunner
+
+#### Phase 6.4: Testing and Validation
+- [ ] Unit tests for `NetworkControllerService`:
+  - Service starts and subscribes correctly
+  - Responds to `ClockPhaseChanged` events
+  - Publishes control signals on rising edge
+  - Cleans up resources on stop
+- [ ] Integration tests:
+  - Run CPU + Network together as hosted services
+  - Verify control signals reach CPU components
+  - Measure event latency (clock → decision → action)
+- [ ] Compare async vs sync behavior:
+  - Same network should produce similar actions
+  - Async mode should not introduce race conditions
+
+#### Phase 6.5: Console Application Update
+- [ ] Update `NeuralCpu.Console` to support async network mode
+- [ ] Add command to toggle between sync/async execution
+- [ ] Display network status in TUI (active, idle, decision count)
+- [ ] Add real-time event stream view (show network decisions as they happen)
+
+---
+
+## Success Metrics (Updated)
+
+**Phase 6 (Async Network Component):**
+- ✅ Network runs as independent hosted service
+- ✅ Responds to clock events with <10ms latency
+- ✅ Produces equivalent actions in async vs sync modes
+- ✅ No race conditions or event ordering issues
+- ✅ Clean startup/shutdown with other components
+
 ---
 
 ## Success Metrics
@@ -341,3 +403,39 @@ Implement structured action space encoding where the network outputs EncodedEven
 - Then mixed training (valid events + task objectives)
 - Avoids wasting gradients on invalid actions
 - Separate concerns: validity vs optimality
+
+### Network as Async Component (Milestone 6)
+**Philosophy**: The network is not a special privileged component - it's just another observer on the event bus, like Clock, ALU, Stack, etc.
+
+**Two Execution Modes**:
+1. **Synchronous (Training)**: TaskRunner calls network directly in loop
+   - Deterministic episode execution
+   - Full control for gradient computation
+   - Batch collection of state/action/reward tuples
+   
+2. **Asynchronous (Inference/Deployment)**: Network as hosted service
+   - Subscribes to `ClockPhaseChanged` events
+   - Reacts to CPU state changes independently
+   - True event-driven microkernel architecture
+   - No central orchestrator
+
+**Event-Driven Flow** (Async Mode):
+```
+Clock.Step() → ClockPhaseChanged event
+             ↓
+NetworkControllerService.OnNext()
+             ↓
+Build state vector
+             ↓
+Decide next action
+             ↓
+Publish control signal (e.g., RegisterWriteCommand)
+             ↓
+RegisterFile.OnNext() → execute write
+```
+
+**Why Clock-Based Initially?**
+- Simpler: Network observes at discrete time steps (rising edge)
+- Less noise: Don't overwhelm network with every RegisterChanged/StackPush/etc.
+- Natural feedback loop: Decision → execution → observe next state
+- Future: Can add full event stream observation as advanced feature
