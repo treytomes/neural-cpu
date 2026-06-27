@@ -2,6 +2,7 @@ using NeuralCpu.Core;
 using NeuralCpu.Core.Components;
 using NeuralCpu.Core.Events;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 
 namespace NeuralCpu.Network.Training;
 
@@ -262,10 +263,32 @@ public sealed class BasicMotorSkillsTask
 
         if (action != null)
         {
-            _eventBus.Publish(action);
+            PublishDynamic(action);
         }
 
         _clock.Step();
+    }
+
+    /// <summary>
+    /// Publishes an action with its runtime type (not object).
+    /// Necessary because INetworkController returns object, but EventBus needs exact types.
+    /// </summary>
+    private void PublishDynamic(object action)
+    {
+        // Use reflection to call Publish<T> with the runtime type
+        var actionType = action.GetType();
+        var publishMethod = typeof(IEventBus).GetMethod(nameof(IEventBus.Publish))!
+            .MakeGenericMethod(actionType);
+
+        try
+        {
+            publishMethod.Invoke(_eventBus, new[] { action });
+        }
+        catch (TargetInvocationException ex)
+        {
+            // Unwrap reflection exception to preserve original stack trace
+            throw ex.InnerException ?? ex;
+        }
     }
 
     #endregion
