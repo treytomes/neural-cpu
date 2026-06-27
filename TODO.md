@@ -302,22 +302,82 @@ See Milestone 5.5 for developmental learning approach.
 **Philosophy**: Like a human learning motor control, the network needs to discover its "body schema" - how control signals affect CPU state.
 
 #### Phase 5.5.1: Input/Output Components (Sensory Organs)
-- [ ] Create `InputDevice` component: first-class event bus component for "listening"
-  - Subscribes to `ClockPhaseChanged`
-  - Publishes `InputAvailableEvent` when network queries for input
-  - Responds to `InputReadRequest` with `InputReadResponse`
-  - Holds current task input data (no memory addresses needed)
-  - Simple register-like interface: "read from InputDevice → get next input value"
-  
-- [ ] Create `OutputDevice` component: first-class event bus component for "speaking"
-  - Subscribes to `OutputWriteCommand` events
-  - Buffers output values in order
-  - Publishes `OutputWriteAcknowledged` for feedback
-  - Network writes via events, not memory addresses
-  
-- [ ] Update CPU architecture diagram in CLAUDE.md to show InputDevice and OutputDevice as peers to RegisterFile, ALU, Stack, Memory
 
-**Rationale**: Instead of memory-mapped I/O at arbitrary addresses (0x80000000), treat I/O as specialized components the network can discover naturally. Like humans have ears and vocal cords as distinct organs, the CPU has InputDevice and OutputDevice as distinct components.
+**Architecture**: Device Registry pattern supporting multiple I/O devices (0-15)
+
+- [ ] Create `IInputDevice` interface:
+  ```csharp
+  public interface IInputDevice
+  {
+      byte DeviceId { get; }        // 0-15
+      string DeviceName { get; }    // "TaskInput", "Sensor", "Keyboard"
+      bool HasData { get; }
+      ulong Read();                 // Returns next value
+  }
+  ```
+
+- [ ] Create `IOutputDevice` interface:
+  ```csharp
+  public interface IOutputDevice
+  {
+      byte DeviceId { get; }        // 0-15
+      string DeviceName { get; }    // "TaskOutput", "Display", "Actuator"
+      void Write(ulong value);
+      IReadOnlyList<ulong> GetBuffer();
+  }
+  ```
+
+- [ ] Create `DeviceRegistry` component:
+  - Manages multiple input/output devices
+  - Subscribes to `InputReadRequest(deviceId)` events
+  - Publishes `InputReadResponse(deviceId, value, hasData)` events
+  - Subscribes to `OutputWriteCommand(deviceId, value)` events
+  - Publishes `OutputWriteAcknowledged(deviceId)` events
+  - Publishes `DeviceDiscoveredEvent(deviceId, type, name)` when network first accesses a device
+  
+- [ ] Create `TaskInputDevice` implementation:
+  - DeviceId = 0 (primary task input)
+  - Holds input buffer loaded at episode start
+  - Sequential read (FIFO)
+  
+- [ ] Create `TaskOutputDevice` implementation:
+  - DeviceId = 0 (primary task output)
+  - Buffers output values in order
+  - Used for reward computation
+
+- [ ] Update `EncodedEvent` and action decoder:
+  - Add `DeviceId` field to InputRead and OutputWrite events
+  - Action space: `[EventType(33), Reg1-3(24), DeviceId(16), Value(256)]`
+  - Total: 33 + 24 + 16 + 256 = 329 dimensions (was 313)
+
+- [ ] Update CPU architecture diagram in CLAUDE.md:
+  - Show DeviceRegistry as peer to RegisterFile, ALU, Stack, Memory
+  - Show multiple I/O devices (TaskInput/TaskOutput initially, extensible to 16 devices)
+
+**Rationale**: 
+- **Scalability**: Support for 16 input + 16 output devices from day one
+- **Realism**: Real CPUs have I/O ports (0x60 for keyboard, 0x3F8 for serial, etc.)
+- **Discoverability**: Network learns "device 0 exists" before "device 0 is for tasks"
+- **Extensibility**: Later add sensor devices, actuator devices, network devices without architecture changes
+
+**Example evolution**:
+- **Phase 1**: Single TaskInput/TaskOutput (deviceId=0)
+- **Phase 2**: Add SensorDevice (deviceId=1) for environment observations
+- **Phase 3**: Add DisplayDevice (deviceId=1 output) for visualization
+- **Phase 4**: Add NetworkDevice (deviceId=2) for inter-CPU communication
+
+**Event flow**:
+```
+Network: InputReadRequest(deviceId: 0)
+         ↓
+DeviceRegistry: Routes to TaskInputDevice
+         ↓
+TaskInputDevice: Returns next value
+         ↓
+DeviceRegistry: Publishes InputReadResponse(deviceId: 0, value: 42, hasData: true)
+         ↓
+Network: Observes response in next state vector
+```
 
 #### Phase 5.5.2: Body Discovery (Intrinsic Motivation)
 - [ ] Create `BodyDiscoveryTask` with intrinsic rewards:
@@ -354,13 +414,15 @@ See Milestone 5.5 for developmental learning approach.
   - Reward: 1.0 if any ALU operation executed
   - Tests: Can network emit valid ALU command?
 
-- [ ] Create `InputReadTask`: Read value from InputDevice
-  - Reward: 1.0 if InputReadRequest was issued
-  - Tests: Can network discover InputDevice component?
+- [ ] Create `InputReadTask`: Read value from any input device
+  - Reward: 1.0 if InputReadRequest was issued to any deviceId
+  - Tests: Can network discover DeviceRegistry component and input operations?
+  - Stretch: +0.5 bonus for discovering multiple input devices (if present)
 
-- [ ] Create `OutputWriteTask`: Write any value to OutputDevice
-  - Reward: 1.0 if OutputWriteCommand was issued
-  - Tests: Can network discover OutputDevice component?
+- [ ] Create `OutputWriteTask`: Write any value to any output device
+  - Reward: 1.0 if OutputWriteCommand was issued to any deviceId
+  - Tests: Can network discover DeviceRegistry component and output operations?
+  - Stretch: +0.5 bonus for discovering multiple output devices (if present)
 
 - [ ] Train 200 episodes per task
 - [ ] Measure: Success rate per task, cycles to first success
@@ -380,13 +442,15 @@ See Milestone 5.5 for developmental learning approach.
   - Reward: Partial credit for correct sum
   - Tests: Can network sequence ALU operation with register reads/writes?
 
-- [ ] Create `InputToRegisterTask`: Read from InputDevice into any register
-  - Reward: 1.0 if input value appears in any register
-  - Tests: Can network sequence InputRead + RegisterWrite?
+- [ ] Create `InputToRegisterTask`: Read from input device into any register
+  - Reward: 1.0 if input value from device 0 appears in any register
+  - Tests: Can network sequence InputReadRequest(0) + RegisterWrite?
+  - Teaches: deviceId=0 is primary task input
 
-- [ ] Create `RegisterToOutputTask`: Write any register to OutputDevice
-  - Reward: 1.0 if any register value appears in output buffer
-  - Tests: Can network sequence RegisterRead + OutputWrite?
+- [ ] Create `RegisterToOutputTask`: Write any register to output device
+  - Reward: 1.0 if any register value appears in output device 0 buffer
+  - Tests: Can network sequence RegisterRead + OutputWriteCommand(0)?
+  - Teaches: deviceId=0 is primary task output
 
 - [ ] Train 300 episodes per task
 - [ ] Measure: Success rate, average episode length, event sequence patterns
@@ -394,17 +458,22 @@ See Milestone 5.5 for developmental learning approach.
 **Expected outcome**: Network learns multi-step coordination between components.
 
 #### Phase 5.5.5: Goal-Oriented Tasks (Now Achievable)
-- [ ] Create `EchoTask` (simplified): InputDevice → OutputDevice
-  - Network already knows how to read from InputDevice
-  - Network already knows how to write to OutputDevice
-  - Just needs to learn: do both in sequence
-  - Reward: Partial credit for correct values
+- [ ] Create `EchoTask` (simplified): InputDevice(0) → OutputDevice(0)
+  - Network already knows how to read from device 0
+  - Network already knows how to write to device 0
+  - Just needs to learn: do both in sequence for correct values
+  - Reward: Partial credit for correct values in output buffer
   
-- [ ] Create `IncrementTask`: InputDevice → ALU(+1) → OutputDevice
+- [ ] Create `IncrementTask`: InputDevice(0) → ALU(+1) → OutputDevice(0)
   - Builds on Echo + ALU coordination
   
-- [ ] Create `ReverseTask`: InputDevice → Stack → OutputDevice
+- [ ] Create `ReverseTask`: InputDevice(0) → Stack → OutputDevice(0)
   - Builds on Echo + Stack coordination
+
+- [ ] Create `MultiDeviceTask` (advanced): InputDevice(0) + InputDevice(1) → OutputDevice(0)
+  - Read from two input devices, combine (add/multiply), write result
+  - Tests: Can network handle multiple devices simultaneously?
+  - Demonstrates extensibility of device architecture
 
 - [ ] Train 100 episodes per task (should converge quickly)
 - [ ] Measure: Success rate, training time vs Phase 5.2 baseline
@@ -593,14 +662,28 @@ RegisterFile.OnNext() → execute write
 ### Embodied Learning Architecture (Milestone 5.5)
 **Philosophy**: The network needs to learn its "body" - the causal relationships between control signals and CPU state changes.
 
-**Sensory Organs (InputDevice/OutputDevice)**:
-Instead of memory-mapped I/O at arbitrary addresses, treat I/O as first-class components:
+**Device Registry Pattern (Multiple I/O Devices)**:
+Instead of memory-mapped I/O at arbitrary addresses, treat I/O as first-class components with device IDs:
 ```
-InputDevice:  Network queries → receives input values
-OutputDevice: Network writes → output buffer grows
+DeviceRegistry:
+  - Input Devices (0-15):  Network queries deviceId → receives value
+  - Output Devices (0-15): Network writes to deviceId → buffer grows
+
+Event flow:
+  InputReadRequest(deviceId: 0)  → DeviceRegistry routes → TaskInputDevice
+  OutputWriteCommand(deviceId: 0, value) → DeviceRegistry routes → TaskOutputDevice
 ```
 
-Like humans have ears (input) and vocal cords (output) as specialized organs, the CPU has InputDevice and OutputDevice as specialized components. The network discovers these through exploration, not address generation.
+**Scalability**: Supports 16 input + 16 output devices from day one:
+- **Device 0**: Task I/O (primary interface for learning tasks)
+- **Devices 1-15**: Future expansion (sensors, actuators, network, display, etc.)
+
+Like humans have multiple sensory organs (eyes, ears, touch) and effectors (hands, voice, locomotion), the CPU has a registry of specialized I/O devices. The network discovers these through exploration, not address generation.
+
+**Action Space**:
+- Old: `[EventType(33), Regs(24), Value(256)]` = 313 dimensions
+- New: `[EventType(33), Regs(24), DeviceId(16), Value(256)]` = 329 dimensions
+- DeviceId encoded as 4-bit field (16 devices) via softmax
 
 **Developmental Phases** (Inspired by Human Motor Learning):
 1. **Body Discovery** (0-6 months): Random motor babbling, intrinsic rewards for making things happen

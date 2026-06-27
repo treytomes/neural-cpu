@@ -98,7 +98,7 @@ public sealed class MoENetworkBuilder
     public MoENetworkBuilder WithStandardExperts()
     {
         _expertDomains.Clear();
-        _expertDomains.AddRange(new[] { "ALU", "Memory", "Stack", "Control" });
+        _expertDomains.AddRange(["ALU", "Memory", "Stack", "Control"]);
         return this;
     }
 
