@@ -282,17 +282,154 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [ ] Add value range handling (Phase 4.2)
 - [ ] Test: Network generates appropriate value ranges
 
-### Milestone 5: End-to-End Validation
+### Milestone 5: End-to-End Validation (BLOCKED - Redesign Needed)
 - [x] Write comprehensive unit tests (Phase 5.1) - TrainingOrchestratorTests (8 tests)
 - [x] Create TrainingOrchestrator class (coordinates DPO + task training)
 - [x] Write integration tests (Phase 5.2) - EndToEndTrainingTests (8 tests)
 - [x] **CRITICAL**: Implement real policy gradient backpropagation - PolicyGradientTrainer (9 tests)
 - [x] **CRITICAL**: Fix gradient flow - removed .detach() from episode buffer storage
 - [x] Debug training - identified root cause: Echo task too hard for random init (PolicyLoss=-0.0, Output Length=0)
-- [ ] **BLOCKER**: Implement curriculum learning or reward shaping (random network never writes to OUTPUT_BUFFER)
-- [ ] Add visualization/debugging tools (Phase 5.3)
-- [ ] Run simpler tasks first (register operations, no memory addresses)
-- [ ] Measure: Task success rate, invalid event rate, training time
+- [ ] **ROOT CAUSE IDENTIFIED**: Two compounding problems:
+  1. Network doesn't know how to use its "body" (event sequencing, cause-effect)
+  2. Memory-mapped I/O requires discovering specific 64-bit addresses (impossible via random search)
+- [ ] **SOLUTION**: Implement Milestone 5.5 (Embodied Learning) before continuing
+
+**Status**: Policy gradient implementation is correct and working. Task design needs fundamental rethink.
+See Milestone 5.5 for developmental learning approach.
+
+### Milestone 5.5: Embodied Learning - Teaching the Network Its Body
+**Goal**: Implement developmental learning phases where network learns CPU dynamics before task-solving.
+**Philosophy**: Like a human learning motor control, the network needs to discover its "body schema" - how control signals affect CPU state.
+
+#### Phase 5.5.1: Input/Output Components (Sensory Organs)
+- [ ] Create `InputDevice` component: first-class event bus component for "listening"
+  - Subscribes to `ClockPhaseChanged`
+  - Publishes `InputAvailableEvent` when network queries for input
+  - Responds to `InputReadRequest` with `InputReadResponse`
+  - Holds current task input data (no memory addresses needed)
+  - Simple register-like interface: "read from InputDevice → get next input value"
+  
+- [ ] Create `OutputDevice` component: first-class event bus component for "speaking"
+  - Subscribes to `OutputWriteCommand` events
+  - Buffers output values in order
+  - Publishes `OutputWriteAcknowledged` for feedback
+  - Network writes via events, not memory addresses
+  
+- [ ] Update CPU architecture diagram in CLAUDE.md to show InputDevice and OutputDevice as peers to RegisterFile, ALU, Stack, Memory
+
+**Rationale**: Instead of memory-mapped I/O at arbitrary addresses (0x80000000), treat I/O as specialized components the network can discover naturally. Like humans have ears and vocal cords as distinct organs, the CPU has InputDevice and OutputDevice as distinct components.
+
+#### Phase 5.5.2: Body Discovery (Intrinsic Motivation)
+- [ ] Create `BodyDiscoveryTask` with intrinsic rewards:
+  - +0.1 for each register change (discover RegisterWrite)
+  - +0.2 for each stack operation (discover Push/Pop)
+  - +0.3 for each memory write (discover Store)
+  - +0.5 for discovering new event type (encourage exploration)
+  - No extrinsic task goal - just explore and learn cause-effect
+  
+- [ ] Implement `IntrinsicRewardTracker`:
+  - Tracks which event types have been discovered
+  - Tracks state change diversity (encourage varied outcomes)
+  - Diminishing returns for repeated discoveries
+  
+- [ ] Train for 1000 episodes on BodyDiscovery
+- [ ] Measure: Event type diversity, state change rate, exploration coverage
+
+**Expected outcome**: Network learns "RegisterWrite changes registers", "Push grows stack", etc.
+
+#### Phase 5.5.3: Basic Motor Skills (Component Mastery)
+- [ ] Create `RegisterActivationTask`: Make any register non-zero
+  - Reward: 1.0 if any R0-R3 != 0
+  - Tests: Can network discover RegisterWrite event?
+  
+- [ ] Create `RegisterChangeTask`: Make any register change from initial value
+  - Reward: 1.0 if any register changed
+  - Tests: Can network generate valid RegisterWrite with non-zero value?
+  
+- [ ] Create `StackGrowthTask`: Increase stack size
+  - Reward: 1.0 if stack.Count > 0
+  - Tests: Can network discover Push event?
+  
+- [ ] Create `ALUActivationTask`: Perform any ALU operation
+  - Reward: 1.0 if any ALU operation executed
+  - Tests: Can network emit valid ALU command?
+
+- [ ] Create `InputReadTask`: Read value from InputDevice
+  - Reward: 1.0 if InputReadRequest was issued
+  - Tests: Can network discover InputDevice component?
+
+- [ ] Create `OutputWriteTask`: Write any value to OutputDevice
+  - Reward: 1.0 if OutputWriteCommand was issued
+  - Tests: Can network discover OutputDevice component?
+
+- [ ] Train 200 episodes per task
+- [ ] Measure: Success rate per task, cycles to first success
+
+**Expected outcome**: Network masters individual components in isolation.
+
+#### Phase 5.5.4: Coordination (Multi-Step Sequences)
+- [ ] Create `RegisterCopyTask`: Copy any register to another
+  - Reward: 1.0 if any two registers have same non-zero value
+  - Tests: Can network sequence RegisterCopy or (RegisterRead + RegisterWrite)?
+  
+- [ ] Create `RegisterSwapTask`: Exchange values between two registers
+  - Reward: 1.0 if R0 and R1 swapped from initial state
+  - Tests: Can network use temporary register (R2) for swap?
+  
+- [ ] Create `ALUComputeTask`: Compute R2 = R0 + R1
+  - Reward: Partial credit for correct sum
+  - Tests: Can network sequence ALU operation with register reads/writes?
+
+- [ ] Create `InputToRegisterTask`: Read from InputDevice into any register
+  - Reward: 1.0 if input value appears in any register
+  - Tests: Can network sequence InputRead + RegisterWrite?
+
+- [ ] Create `RegisterToOutputTask`: Write any register to OutputDevice
+  - Reward: 1.0 if any register value appears in output buffer
+  - Tests: Can network sequence RegisterRead + OutputWrite?
+
+- [ ] Train 300 episodes per task
+- [ ] Measure: Success rate, average episode length, event sequence patterns
+
+**Expected outcome**: Network learns multi-step coordination between components.
+
+#### Phase 5.5.5: Goal-Oriented Tasks (Now Achievable)
+- [ ] Create `EchoTask` (simplified): InputDevice → OutputDevice
+  - Network already knows how to read from InputDevice
+  - Network already knows how to write to OutputDevice
+  - Just needs to learn: do both in sequence
+  - Reward: Partial credit for correct values
+  
+- [ ] Create `IncrementTask`: InputDevice → ALU(+1) → OutputDevice
+  - Builds on Echo + ALU coordination
+  
+- [ ] Create `ReverseTask`: InputDevice → Stack → OutputDevice
+  - Builds on Echo + Stack coordination
+
+- [ ] Train 100 episodes per task (should converge quickly)
+- [ ] Measure: Success rate, training time vs Phase 5.2 baseline
+
+**Expected outcome**: Tasks that were impossible (0% success) become solvable (>90% success) because network has body schema.
+
+#### Phase 5.5.6: Curriculum Training Orchestrator
+- [ ] Create `CurriculumTrainer` class:
+  - Phases: BodyDiscovery → BasicMotorSkills → Coordination → GoalOriented
+  - Automatic progression when success threshold reached
+  - Checkpoint saving between phases
+  - Visualization of curriculum progress
+  
+- [ ] Implement adaptive pacing:
+  - If task not converging after N episodes, provide scaffolding (partial rewards)
+  - If task mastered quickly, skip ahead
+  
+- [ ] Add curriculum metrics:
+  - Phase completion times
+  - Transfer learning effectiveness (does Phase N help Phase N+1?)
+  - Final task performance vs flat training baseline
+
+**Expected outcome**: End-to-end training from random initialization to solving Echo/Increment/Reverse.
+
+---
 
 ### Milestone 6: Network as Async Component
 **Goal**: Implement network as asynchronous hosted service, aligned with event-driven microkernel architecture.
@@ -348,6 +485,14 @@ Implement structured action space encoding where the network outputs EncodedEven
 ---
 
 ## Success Metrics (Updated)
+
+**Phase 5.5 (Embodied Learning):**
+- ✅ Body Discovery: Network discovers all major event types (RegisterWrite, Push, Pop, ALU, InputRead, OutputWrite)
+- ✅ Basic Motor Skills: >90% success rate on single-component tasks within 200 episodes
+- ✅ Coordination: >75% success rate on multi-step tasks within 300 episodes
+- ✅ Goal-Oriented: >90% success rate on Echo task within 100 episodes (vs 0% with flat training)
+- ✅ Curriculum completes end-to-end in <2000 total episodes (vs impossible with flat training)
+- ✅ Transfer learning: Each phase reduces training time for next phase by >50%
 
 **Phase 6 (Async Network Component):**
 - ✅ Network runs as independent hosted service
@@ -444,3 +589,23 @@ RegisterFile.OnNext() → execute write
 - Less noise: Don't overwhelm network with every RegisterChanged/StackPush/etc.
 - Natural feedback loop: Decision → execution → observe next state
 - Future: Can add full event stream observation as advanced feature
+
+### Embodied Learning Architecture (Milestone 5.5)
+**Philosophy**: The network needs to learn its "body" - the causal relationships between control signals and CPU state changes.
+
+**Sensory Organs (InputDevice/OutputDevice)**:
+Instead of memory-mapped I/O at arbitrary addresses, treat I/O as first-class components:
+```
+InputDevice:  Network queries → receives input values
+OutputDevice: Network writes → output buffer grows
+```
+
+Like humans have ears (input) and vocal cords (output) as specialized organs, the CPU has InputDevice and OutputDevice as specialized components. The network discovers these through exploration, not address generation.
+
+**Developmental Phases** (Inspired by Human Motor Learning):
+1. **Body Discovery** (0-6 months): Random motor babbling, intrinsic rewards for making things happen
+2. **Basic Motor Skills** (6-12 months): Master individual components (registers, stack, ALU, I/O)
+3. **Coordination** (12-18 months): Multi-step sequences (copy, swap, compute)
+4. **Goal-Oriented** (18+ months): Solve tasks using learned body schema
+
+**Key Insight**: Network learns "how" before "what" - discovers event mechanics before task objectives.
