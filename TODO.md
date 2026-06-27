@@ -379,7 +379,11 @@ DeviceRegistry: Publishes InputReadResponse(deviceId: 0, value: 42, hasData: tru
 Network: Observes response in next state vector
 ```
 
-#### Phase 5.5.2: Body Discovery (Intrinsic Motivation) ✅ COMPLETE
+#### Phase 5.5.2: Body Discovery (Intrinsic Motivation) 🔨 INFRASTRUCTURE COMPLETE
+
+**Status**: Framework complete. Training integration **deferred** pending Motor Skills (5.5.3) results.
+
+**Rationale**: Testing goal-oriented learning (Motor Skills) first. If training plateaus (<30% success), will implement body discovery pre-training as a curriculum learning step. If Motor Skills succeeds (>60% on 3+ tasks), body discovery may be unnecessary.
 
 - [x] Create `BodyDiscoveryTask` with intrinsic rewards:
   - +0.1 for each register change (discover RegisterWrite)
@@ -396,15 +400,22 @@ Network: Observes response in next state vector
   - Diminishing returns after 10 uses: reward / sqrt(count - threshold)
   - `GetStats()` for monitoring: coverage, most-used event, total actions
   
-- [x] Unit tests: 10 comprehensive tests for IntrinsicRewardTracker
+- [x] Unit tests: 10 comprehensive tests for IntrinsicRewardTracker (all passing)
   
-- [ ] Integrate with PolicyGradientTrainer for actual training
-- [ ] Train for 500-2000 episodes on BodyDiscovery (until 80% coverage or plateau)
-- [ ] Measure: Event type diversity, state change rate, exploration coverage
+- [ ] **DEFERRED**: Integrate with PolicyGradientTrainer for actual training
+  - Create BodyDiscoveryTrainer (similar to MotorSkillsTrainer)
+  - Add integration test
+  - **Decision point**: Implement only if Motor Skills training plateaus
+  
+- [ ] **DEFERRED**: Train for 500-2000 episodes on BodyDiscovery (until 80% coverage or plateau)
+- [ ] **DEFERRED**: Measure: Event type diversity, state change rate, exploration coverage
 
-**Expected outcome**: Network learns "RegisterWrite changes registers", "Push grows stack", "InputRead gets values from device 0", etc.
+**Expected outcome** (if we run this): Network learns "RegisterWrite changes registers", "Push grows stack", "InputRead gets values from device 0", etc.
 
-**Status**: Infrastructure complete (BodyDiscoveryTask + IntrinsicRewardTracker), training integration pending.
+**Decision criteria for activation**:
+- ✅ Motor Skills succeeds (>60% on 3+ tasks) → Skip body discovery, proceed to Coordination (5.5.4)
+- ⚠️ Motor Skills plateaus (<30% on most tasks) → Implement body discovery pre-training
+- 📊 Mixed results (30-60%) → Evaluate whether pre-training would help specific tasks
 
 #### Phase 5.5.3: Basic Motor Skills (Component Mastery) ✅ COMPLETE
 
