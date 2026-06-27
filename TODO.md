@@ -283,8 +283,9 @@ Implement structured action space encoding where the network outputs EncodedEven
 - [ ] Test: Network generates appropriate value ranges
 
 ### Milestone 5: End-to-End Validation
-- [ ] Write comprehensive unit tests (Phase 5.1)
-- [ ] Write integration tests (Phase 5.2)
+- [x] Write comprehensive unit tests (Phase 5.1) - TrainingOrchestratorTests (8 tests)
+- [x] Create TrainingOrchestrator class (coordinates DPO + task training)
+- [ ] Write integration tests (Phase 5.2) - actual training runs
 - [ ] Add visualization/debugging tools (Phase 5.3)
 - [ ] Run Echo/Increment/Reverse tasks with neural controller
 - [ ] Measure: Task success rate, invalid event rate, training time
