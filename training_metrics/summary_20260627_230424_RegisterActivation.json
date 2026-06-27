@@ -1,0 +1,9 @@
+{
+  "RunId": "20260627_230424",
+  "TaskName": "RegisterActivation",
+  "TotalEpisodes": 200,
+  "SuccessCount": 19,
+  "SuccessRate": 0.095,
+  "AvgCyclesToSuccess": 4.684210526315789,
+  "Timestamp": "2026-06-27T23:06:24.2202847+00:00"
+}

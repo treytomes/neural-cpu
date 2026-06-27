@@ -17,6 +17,13 @@ internal class Program
 {
     static void Main(string[] args)
     {
+        // Check for training mode
+        if (args.Length > 0 && args[0] == "train")
+        {
+            RunTraining().GetAwaiter().GetResult();
+            return;
+        }
+
         try
         {
             var builder = Host.CreateApplicationBuilder(args);
@@ -117,5 +124,32 @@ internal class Program
         {
             Log.CloseAndFlush();
         }
+    }
+
+    static async Task RunTraining()
+    {
+        var runner = new TrainingRunner();
+
+        try
+        {
+            await runner.RunTrainingAsync(
+                episodesPerTask: 200,
+                maxCyclesPerEpisode: 50,
+                checkpointInterval: 50,
+                resume: true);
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Training failed: {ex.Message}");
+            System.Console.WriteLine(ex.StackTrace);
+            return;
+        }
+        finally
+        {
+            await runner.DisposeAsync();
+        }
+
+        System.Console.WriteLine("\nPress any key to exit...");
+        System.Console.ReadKey();
     }
 }

@@ -1,0 +1,8 @@
+{
+  "RunId": "20260627_230424",
+  "TaskName": "InputRead",
+  "Episode": 199,
+  "TotalEpisodes": 800,
+  "Timestamp": "2026-06-27T23:10:30.6904224+00:00",
+  "CheckpointPath": "checkpoints\\checkpoint_20260627_230424_InputRead_ep0199"
+}

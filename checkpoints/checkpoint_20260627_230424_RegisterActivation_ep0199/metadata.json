@@ -1,0 +1,8 @@
+{
+  "RunId": "20260627_230424",
+  "TaskName": "RegisterActivation",
+  "Episode": 199,
+  "TotalEpisodes": 200,
+  "Timestamp": "2026-06-27T23:06:24.2045264+00:00",
+  "CheckpointPath": "checkpoints\\checkpoint_20260627_230424_RegisterActivation_ep0199"
+}

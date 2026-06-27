@@ -71,7 +71,7 @@ def plot_success_rate(df, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'success_rate.png', dpi=300, bbox_inches='tight')
     plt.close()
-    print("✓ success_rate.png")
+    print("[OK] success_rate.png")
 
 def plot_policy_loss(df, output_dir):
     """Plot policy loss over episodes."""
@@ -94,7 +94,7 @@ def plot_policy_loss(df, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'policy_loss.png', dpi=300, bbox_inches='tight')
     plt.close()
-    print("✓ policy_loss.png")
+    print("[OK] policy_loss.png")
 
 def plot_cycles_to_success(df, output_dir):
     """Plot cycles to success for successful episodes."""
@@ -117,7 +117,7 @@ def plot_cycles_to_success(df, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'cycles_to_success.png', dpi=300, bbox_inches='tight')
     plt.close()
-    print("✓ cycles_to_success.png")
+    print("[OK] cycles_to_success.png")
 
 def plot_dashboard(df, output_dir):
     """Create a 2x2 dashboard of key metrics."""
@@ -179,7 +179,7 @@ def plot_dashboard(df, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'dashboard.png', dpi=300, bbox_inches='tight')
     plt.close()
-    print("✓ dashboard.png")
+    print("[OK] dashboard.png")
 
 def plot_task_comparison(df, output_dir):
     """Compare final performance across tasks."""
@@ -241,7 +241,7 @@ def plot_task_comparison(df, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'task_comparison.png', dpi=300, bbox_inches='tight')
     plt.close()
-    print("✓ task_comparison.png")
+    print("[OK] task_comparison.png")
 
 def print_summary_stats(df):
     """Print summary statistics to console."""
@@ -286,5 +286,5 @@ if __name__ == "__main__":
     df = pd.read_csv(csv_path)
     print_summary_stats(df)
 
-    print(f"\n✓ All plots generated successfully!")
+    print(f"\n[OK] All plots generated successfully!")
     print(f"  Output directory: {output_dir}")

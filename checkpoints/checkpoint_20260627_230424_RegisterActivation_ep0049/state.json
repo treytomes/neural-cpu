@@ -1,0 +1,21 @@
+{
+  "RunId": "current",
+  "NetworkConfig": {
+    "EmbeddingDim": 128,
+    "NumHeads": 4,
+    "NumEncoderLayers": 2,
+    "Dropout": 0.1
+  },
+  "TrainingConfig": {
+    "LearningRate": 0.0001,
+    "Gamma": 0.99,
+    "EpisodesPerTask": 200,
+    "MaxCyclesPerEpisode": 50
+  },
+  "CurrentTask": "RegisterActivation",
+  "CurrentTaskEpisode": 49,
+  "TotalEpisodesCompleted": 49,
+  "TaskProgress": {},
+  "StartTime": "2026-06-27T23:04:47.942349+00:00",
+  "LastCheckpointTime": "2026-06-27T23:04:47.9423491+00:00"
+}

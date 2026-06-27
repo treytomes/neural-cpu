@@ -1,0 +1,9 @@
+{
+  "RunId": "20260627_230424",
+  "TaskName": "InputRead",
+  "TotalEpisodes": 200,
+  "SuccessCount": 0,
+  "SuccessRate": 0,
+  "AvgCyclesToSuccess": 0,
+  "Timestamp": "2026-06-27T23:10:30.7051548+00:00"
+}
