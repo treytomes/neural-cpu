@@ -58,4 +58,8 @@ public enum EventType : byte
     LoadIndirect = 61,
     StoreDirect = 62,
     StoreIndirect = 63,
+
+    // Device I/O operations
+    InputRead = 70,
+    OutputWrite = 71,
 }

@@ -54,6 +54,7 @@ public sealed class DPOTrainerTests : IDisposable
             RegisterId.R0,
             RegisterId.None,
             RegisterId.None,
+            0,
             100UL);
 
         // Act: Compute log probability
@@ -69,8 +70,8 @@ public sealed class DPOTrainerTests : IDisposable
     {
         // Arrange: Same logits, two different events
         var logits = CreateMockLogits();
-        var event1 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
-        var event2 = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0UL);
+        var event1 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
+        var event2 = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0, 0UL);
 
         // Act: Compute log probs
         var logProb1 = _trainer.ComputeLogProb(logits, event1);
@@ -89,8 +90,8 @@ public sealed class DPOTrainerTests : IDisposable
     {
         // Arrange: Preferred event has higher log prob than rejected
         var logits = CreateMockLogits();
-        var preferredEvent = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
-        var rejectedEvent = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0UL);
+        var preferredEvent = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
+        var rejectedEvent = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0, 0UL);
 
         // Assume preferred has higher log prob (will be checked by ComputeLogProb test)
 
@@ -107,8 +108,8 @@ public sealed class DPOTrainerTests : IDisposable
     {
         // Arrange: Preferred and rejected are identical
         var logits = CreateMockLogits();
-        var event1 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
-        var event2 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
+        var event1 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
+        var event2 = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
 
         // Act: Compute DPO loss
         var loss = _trainer.ComputeDPOLoss(logits, event1, event2);
@@ -176,8 +177,8 @@ public sealed class DPOTrainerTests : IDisposable
         var trainer2 = new DPOTrainer(_controller, beta: 1.0, lambdaDpo: 1.0, device: CPU);
 
         var logits = CreateMockLogits();
-        var preferred = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
-        var rejected = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0UL);
+        var preferred = new EncodedEvent(EventType.RegisterWrite, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
+        var rejected = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0, 0UL);
 
         // Act: Compute loss with different beta
         var loss1 = trainer1.ComputeDPOLoss(logits, preferred, rejected);
@@ -197,7 +198,7 @@ public sealed class DPOTrainerTests : IDisposable
         var events = new EncodedEvent[64];
         for (int i = 0; i < 64; i++)
         {
-            events[i] = new EncodedEvent(EventType.None, RegisterId.None, RegisterId.None, RegisterId.None, 0);
+            events[i] = new EncodedEvent(EventType.None, RegisterId.None, RegisterId.None, RegisterId.None, 0, 0);
         }
         var stack = new ulong[8];
         var memoryAddresses = new ulong[16];

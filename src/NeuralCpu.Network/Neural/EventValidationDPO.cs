@@ -149,7 +149,7 @@ public static class EventValidationDPO
             reg3 = RegisterId.R0;
         }
 
-        return new EncodedEvent(evt.Type, reg1, reg2, reg3, value);
+        return new EncodedEvent(evt.Type, reg1, reg2, reg3, evt.DeviceId, value);
     }
 
     #endregion
@@ -256,6 +256,21 @@ public static class EventValidationDPO
                 Reg3Required: false,
                 ValueUsed: true),    // Interrupt vector (byte)
 
+            // Device I/O operations
+            EventType.InputRead => new(
+                Reg1Required: false,
+                Reg2Required: false,
+                Reg3Required: false,
+                ValueUsed: false,
+                DeviceIdUsed: true),  // DeviceId (0-15)
+
+            EventType.OutputWrite => new(
+                Reg1Required: false,
+                Reg2Required: false,
+                Reg3Required: false,
+                ValueUsed: true,      // Value to write
+                DeviceIdUsed: true),  // DeviceId (0-15)
+
             // Default: no requirements (observe-only events)
             _ => new(
                 Reg1Required: false,
@@ -286,6 +301,7 @@ public record ValidationResult(bool IsValid, List<string> Errors);
 /// <param name="Reg2Optional">Reg2 can be set or None (not enforced).</param>
 /// <param name="Reg3Optional">Reg3 can be set or None (not enforced).</param>
 /// <param name="IsReg2Destination">Reg2 is a destination register (check read-only).</param>
+/// <param name="DeviceIdUsed">DeviceId field is used by this event (I/O operations).</param>
 public record EventRequirements(
     bool Reg1Required,
     bool Reg2Required,
@@ -294,4 +310,5 @@ public record EventRequirements(
     bool Reg1Optional = false,
     bool Reg2Optional = false,
     bool Reg3Optional = false,
-    bool IsReg2Destination = false);
+    bool IsReg2Destination = false,
+    bool DeviceIdUsed = false);

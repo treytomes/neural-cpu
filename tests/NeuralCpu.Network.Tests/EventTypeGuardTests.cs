@@ -67,6 +67,16 @@ public sealed class EventTypeGuardTests
         if (coreEventName == "ClockPhaseChanged")
             return enumValues.Contains("ClockRising") || enumValues.Contains("ClockFalling");
 
+        // Device I/O events map to InputRead/OutputWrite enum values
+        if (coreEventName == "InputReadRequest" || coreEventName == "InputReadResponse")
+            return enumValues.Contains("InputRead");
+
+        if (coreEventName == "OutputWriteCommand" || coreEventName == "OutputWriteAcknowledged")
+            return enumValues.Contains("OutputWrite");
+
+        if (coreEventName == "DeviceDiscoveredEvent")
+            return true; // Observe-only event, doesn't need enum coverage
+
         // Default: look for exact match after normalization
         var normalized = NormalizeEventName(coreEventName);
         return enumValues.Any(e => NormalizeEventName(e).Equals(normalized, StringComparison.OrdinalIgnoreCase));

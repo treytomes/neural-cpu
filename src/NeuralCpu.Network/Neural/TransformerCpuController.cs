@@ -22,11 +22,12 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
 {
     #region Constants
 
-    // Action space dimensions (see TODO.md Phase 1.1)
-    private const int EVENT_TYPE_DIM = 33;    // Actionable event types
+    // Action space dimensions (see TODO.md Phase 5.5.1)
+    private const int EVENT_TYPE_DIM = 35;    // Actionable event types (33 + InputRead + OutputWrite)
     private const int REGISTER_DIM = 8;       // R0-R3, PC, SP, Flags, None
+    private const int DEVICE_ID_DIM = 16;     // Device IDs 0-15
     private const int VALUE_EMBED_DIM = 256;  // Embedding for 64-bit value
-    private const int ACTION_DIM = EVENT_TYPE_DIM + (REGISTER_DIM * 3) + VALUE_EMBED_DIM; // 313
+    private const int ACTION_DIM = EVENT_TYPE_DIM + (REGISTER_DIM * 3) + DEVICE_ID_DIM + VALUE_EMBED_DIM; // 329
 
     #endregion
 
@@ -277,8 +278,8 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
     /// </summary>
     public EncodedEvent DecodeEncodedEvent(Tensor actionLogits)
     {
-        // actionLogits shape: (1, ACTION_DIM) where ACTION_DIM = 313
-        // Layout: [event_type(33) | reg1(8) | reg2(8) | reg3(8) | value_embed(256)]
+        // actionLogits shape: (1, ACTION_DIM) where ACTION_DIM = 329
+        // Layout: [event_type(35) | reg1(8) | reg2(8) | reg3(8) | deviceId(16) | value_embed(256)]
 
         var logitsFlat = actionLogits.squeeze(0); // (ACTION_DIM,)
 
@@ -287,7 +288,8 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         var reg1Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM, EVENT_TYPE_DIM + REGISTER_DIM)];
         var reg2Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM, EVENT_TYPE_DIM + REGISTER_DIM * 2)];
         var reg3Logits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 2, EVENT_TYPE_DIM + REGISTER_DIM * 3)];
-        var valueEmbed = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 3, ACTION_DIM)].unsqueeze(0);
+        var deviceIdLogits = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 3, EVENT_TYPE_DIM + REGISTER_DIM * 3 + DEVICE_ID_DIM)];
+        var valueEmbed = logitsFlat[TensorIndex.Slice(EVENT_TYPE_DIM + REGISTER_DIM * 3 + DEVICE_ID_DIM, ACTION_DIM)].unsqueeze(0);
 
         // Decode event type (argmax over actionable types)
         var eventTypeIndex = eventTypeLogits.argmax().item<long>();
@@ -302,10 +304,14 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
         var reg2 = MapIndexToRegisterId((int)reg2Index);
         var reg3 = MapIndexToRegisterId((int)reg3Index);
 
+        // Decode device ID (argmax, 0-15)
+        var deviceIdIndex = deviceIdLogits.argmax().item<long>();
+        var deviceId = (byte)deviceIdIndex;
+
         // Decode value (embedding → 64 bits)
         var value = DecodeValue(valueEmbed);
 
-        return new EncodedEvent(eventType, reg1, reg2, reg3, value);
+        return new EncodedEvent(eventType, reg1, reg2, reg3, deviceId, value);
     }
 
     /// <summary>
@@ -382,6 +388,10 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
             EventType.StoreDirect => new StoreCommand(evt.Value, evt.Reg1),
             EventType.StoreIndirect => new StoreIndirectCommand(evt.Reg1, evt.Reg2),
 
+            // Device I/O operations
+            EventType.InputRead => new InputReadRequest(evt.DeviceId, DateTimeOffset.Now),
+            EventType.OutputWrite => new OutputWriteCommand(evt.DeviceId, evt.Value, DateTimeOffset.Now),
+
             // Hardware interrupt
             EventType.HardwareInterrupt => new HardwareInterrupt((byte)(evt.Value & 0xFF)),
 
@@ -391,7 +401,7 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
     }
 
     /// <summary>
-    /// Maps action space index (0-32) to actionable EventType.
+    /// Maps action space index (0-34) to actionable EventType.
     /// </summary>
     private static EventType MapIndexToEventType(int index)
     {
@@ -430,6 +440,8 @@ public sealed class TransformerCpuController : Module<Tensor, Tensor>, INetworkC
             30 => EventType.LoadIndirect,
             31 => EventType.StoreDirect,
             32 => EventType.StoreIndirect,
+            33 => EventType.InputRead,
+            34 => EventType.OutputWrite,
             _ => EventType.None
         };
     }

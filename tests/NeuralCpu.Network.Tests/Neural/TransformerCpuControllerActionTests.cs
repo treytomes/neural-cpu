@@ -14,17 +14,19 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
 {
     #region Constants
 
-    // Action space dimensions (from TODO.md Phase 1.1)
-    // EVENT_TYPE_DIM: Count of actionable EventType values
+    // Action space dimensions (from TODO.md Phase 5.5.1)
+    // EVENT_TYPE_DIM: Count of actionable EventType values (33 + InputRead + OutputWrite = 35)
     // REGISTER_DIM: 8 (7 registers + None)
+    // DEVICE_ID_DIM: 16 (device IDs 0-15)
     // VALUE_EMBED_DIM: 256 (embedding for 64-bit value)
 
-    private const int ACTIONABLE_EVENT_TYPES = 33; // Count manually from EventType enum
+    private const int ACTIONABLE_EVENT_TYPES = 35; // 33 + InputRead + OutputWrite
     private const int REGISTER_SLOTS = 8; // R0-R3, PC, SP, Flags, None
+    private const int DEVICE_ID_SLOTS = 16; // 0-15
     private const int VALUE_EMBED_DIM = 256;
 
-    // Total action dimension: type + (reg1 + reg2 + reg3) + value_embedding
-    private const int EXPECTED_ACTION_DIM = ACTIONABLE_EVENT_TYPES + (REGISTER_SLOTS * 3) + VALUE_EMBED_DIM;
+    // Total action dimension: type + (reg1 + reg2 + reg3) + deviceId + value_embedding
+    private const int EXPECTED_ACTION_DIM = ACTIONABLE_EVENT_TYPES + (REGISTER_SLOTS * 3) + DEVICE_ID_SLOTS + VALUE_EMBED_DIM; // 331
 
     #endregion
 
@@ -133,6 +135,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
             RegisterId.R1,
             RegisterId.None,
             RegisterId.None,
+            0,
             123UL);
 
         // Act: Convert to CPU event
@@ -154,6 +157,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
             RegisterId.R0,  // Source
             RegisterId.R2,  // Destination
             RegisterId.None,
+            0,
             0UL);
 
         // Act: Convert to CPU event
@@ -175,6 +179,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
             RegisterId.R0,  // SourceA
             RegisterId.R1,  // SourceB
             RegisterId.R2,  // Destination
+            0,
             0UL);
 
         // Act: Convert to CPU event
@@ -198,6 +203,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
             RegisterId.R3,  // Source register
             RegisterId.None,
             RegisterId.None,
+            0,
             0UL);
 
         // Act: Convert to CPU event
@@ -218,6 +224,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
             RegisterId.R2,  // Destination
             RegisterId.None,
             RegisterId.None,
+            0,
             0x1000UL);  // Address
 
         // Act: Convert to CPU event
@@ -261,7 +268,7 @@ public sealed class TransformerCpuControllerActionTests : IDisposable
         var events = new EncodedEvent[64];
         for (int i = 0; i < 64; i++)
         {
-            events[i] = new EncodedEvent(EventType.None, RegisterId.None, RegisterId.None, RegisterId.None, 0);
+            events[i] = new EncodedEvent(EventType.None, RegisterId.None, RegisterId.None, RegisterId.None, 0, 0);
         }
         var stack = new ulong[8];
         var memoryAddresses = new ulong[16];

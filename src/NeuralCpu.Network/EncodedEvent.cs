@@ -23,6 +23,9 @@ public readonly struct EncodedEvent
     /// <summary>Third register operand (or None if not used)</summary>
     public RegisterId Reg3 { get; init; }
 
+    /// <summary>Device ID for I/O operations (0-15, or 0 if not applicable)</summary>
+    public byte DeviceId { get; init; }
+
     /// <summary>Immediate value, address, or data (0 if not used)</summary>
     public ulong Value { get; init; }
 
@@ -31,12 +34,13 @@ public readonly struct EncodedEvent
     #region Constructors
 
     public EncodedEvent(EventType type, RegisterId reg1 = RegisterId.None, RegisterId reg2 = RegisterId.None,
-        RegisterId reg3 = RegisterId.None, ulong value = 0)
+        RegisterId reg3 = RegisterId.None, byte deviceId = 0, ulong value = 0)
     {
         Type = type;
         Reg1 = reg1;
         Reg2 = reg2;
         Reg3 = reg3;
+        DeviceId = deviceId;
         Value = value;
     }
 
@@ -51,6 +55,7 @@ public readonly struct EncodedEvent
         if (Reg1 != RegisterId.None) parts.Add($"{Reg1}");
         if (Reg2 != RegisterId.None) parts.Add($"{Reg2}");
         if (Reg3 != RegisterId.None) parts.Add($"{Reg3}");
+        if (DeviceId != 0) parts.Add($"Dev{DeviceId}");
         if (Value != 0) parts.Add($"0x{Value:X}");
 
         return string.Join(", ", parts);

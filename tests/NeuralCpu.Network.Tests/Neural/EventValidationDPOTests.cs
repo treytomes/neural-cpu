@@ -15,7 +15,7 @@ public sealed class EventValidationDPOTests
     public void Validate_RegisterWrite_RequiresReg1AndValue()
     {
         // Arrange: Valid RegisterWrite
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.R1, RegisterId.None, RegisterId.None, 123UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.R1, RegisterId.None, RegisterId.None, 0, 123UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -29,7 +29,7 @@ public sealed class EventValidationDPOTests
     public void Validate_RegisterCopy_RequiresReg1AndReg2()
     {
         // Arrange: Valid RegisterCopy
-        var evt = new EncodedEvent(EventType.RegisterCopy, RegisterId.R0, RegisterId.R2, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.RegisterCopy, RegisterId.R0, RegisterId.R2, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -43,7 +43,7 @@ public sealed class EventValidationDPOTests
     public void Validate_AluBinary_RequiresAllThreeRegisters()
     {
         // Arrange: Valid ALU Add
-        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0UL);
+        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -57,7 +57,7 @@ public sealed class EventValidationDPOTests
     public void Validate_AluUnary_RequiresReg1AndReg2()
     {
         // Arrange: Valid ALU Inc (unary)
-        var evt = new EncodedEvent(EventType.AluInc, RegisterId.R3, RegisterId.R1, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.AluInc, RegisterId.R3, RegisterId.R1, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -71,7 +71,7 @@ public sealed class EventValidationDPOTests
     public void Validate_Push_RequiresOnlyReg1()
     {
         // Arrange: Valid Push
-        var evt = new EncodedEvent(EventType.Push, RegisterId.R2, RegisterId.None, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.Push, RegisterId.R2, RegisterId.None, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -85,7 +85,7 @@ public sealed class EventValidationDPOTests
     public void Validate_PushImmediate_RequiresValue()
     {
         // Arrange: Valid PushImmediate
-        var evt = new EncodedEvent(EventType.PushImmediate, RegisterId.None, RegisterId.None, RegisterId.None, 999UL);
+        var evt = new EncodedEvent(EventType.PushImmediate, RegisterId.None, RegisterId.None, RegisterId.None, 0, 999UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -99,7 +99,7 @@ public sealed class EventValidationDPOTests
     public void Validate_LoadDirect_RequiresReg1AndValue()
     {
         // Arrange: Valid LoadDirect (address in value, dest in reg1)
-        var evt = new EncodedEvent(EventType.LoadDirect, RegisterId.R1, RegisterId.None, RegisterId.None, 0x1000UL);
+        var evt = new EncodedEvent(EventType.LoadDirect, RegisterId.R1, RegisterId.None, RegisterId.None, 0, 0x1000UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -117,7 +117,7 @@ public sealed class EventValidationDPOTests
     public void Validate_RegisterWrite_MissingReg1_Invalid()
     {
         // Arrange: RegisterWrite without destination register
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 123UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0, 123UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -133,7 +133,7 @@ public sealed class EventValidationDPOTests
     public void Validate_RegisterCopy_MissingReg2_Invalid()
     {
         // Arrange: RegisterCopy with source but no destination
-        var evt = new EncodedEvent(EventType.RegisterCopy, RegisterId.R0, RegisterId.None, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.RegisterCopy, RegisterId.R0, RegisterId.None, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -149,7 +149,7 @@ public sealed class EventValidationDPOTests
     public void Validate_AluBinary_MissingReg3_Invalid()
     {
         // Arrange: ALU Add without destination register
-        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -165,7 +165,7 @@ public sealed class EventValidationDPOTests
     public void Validate_Push_WithUnusedReg2_Invalid()
     {
         // Arrange: Push with extra register (shouldn't have Reg2)
-        var evt = new EncodedEvent(EventType.Push, RegisterId.R0, RegisterId.R1, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.Push, RegisterId.R0, RegisterId.R1, RegisterId.None, 0, 0UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -181,7 +181,7 @@ public sealed class EventValidationDPOTests
     public void Validate_PC_AsDestination_Invalid()
     {
         // Arrange: Try to write to PC (read-only)
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.PC, RegisterId.None, RegisterId.None, 100UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.PC, RegisterId.None, RegisterId.None, 0, 100UL);
 
         // Act: Validate
         var result = EventValidationDPO.Validate(evt);
@@ -201,7 +201,7 @@ public sealed class EventValidationDPOTests
     public void Correct_RegisterWrite_MissingReg1_SetsR0()
     {
         // Arrange: Invalid RegisterWrite (no dest register)
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 123UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.None, RegisterId.None, RegisterId.None, 0, 123UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
@@ -215,7 +215,7 @@ public sealed class EventValidationDPOTests
     public void Correct_AluBinary_MissingReg3_SetsR0()
     {
         // Arrange: Invalid ALU Add (no destination)
-        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R1, RegisterId.R2, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R1, RegisterId.R2, RegisterId.None, 0, 0UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
@@ -228,7 +228,7 @@ public sealed class EventValidationDPOTests
     public void Correct_Push_WithUnusedReg2_ClearsReg2()
     {
         // Arrange: Push with extra register
-        var evt = new EncodedEvent(EventType.Push, RegisterId.R3, RegisterId.R1, RegisterId.None, 0UL);
+        var evt = new EncodedEvent(EventType.Push, RegisterId.R3, RegisterId.R1, RegisterId.None, 0, 0UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
@@ -242,7 +242,7 @@ public sealed class EventValidationDPOTests
     public void Correct_PC_AsDestination_ReplacesWithR0()
     {
         // Arrange: Try to write to PC
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.PC, RegisterId.None, RegisterId.None, 100UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.PC, RegisterId.None, RegisterId.None, 0, 100UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
@@ -255,7 +255,7 @@ public sealed class EventValidationDPOTests
     public void Correct_SP_AsDestination_ReplacesWithR0()
     {
         // Arrange: Try to write to SP (managed by stack)
-        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.SP, RegisterId.None, RegisterId.None, 50UL);
+        var evt = new EncodedEvent(EventType.RegisterWrite, RegisterId.SP, RegisterId.None, RegisterId.None, 0, 50UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
@@ -268,7 +268,7 @@ public sealed class EventValidationDPOTests
     public void Correct_AlreadyValid_NoChanges()
     {
         // Arrange: Valid event
-        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0UL);
+        var evt = new EncodedEvent(EventType.AluAdd, RegisterId.R0, RegisterId.R1, RegisterId.R2, 0, 0UL);
 
         // Act: Correct
         var corrected = EventValidationDPO.Correct(evt);
