@@ -10,6 +10,7 @@
         "checkpointing",
         "CUDA",
         "datapath",
+        "eventbus",
         "feedforward",
         "GELU",
         "hyperparameters",

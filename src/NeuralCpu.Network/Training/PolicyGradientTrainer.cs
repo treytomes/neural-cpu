@@ -73,11 +73,11 @@ public sealed class PolicyGradientTrainer : IDisposable
                 StepCount: 0);
         }
 
-        // Build rewards array (simple credit assignment: assign terminal reward to all steps)
+        // Build rewards array (sparse terminal reward: assign only to final step)
         var rewards = new double[episodeBuffer.Count];
-        for (int i = 0; i < episodeBuffer.Count; i++)
+        if (episodeBuffer.Count > 0)
         {
-            rewards[i] = terminalReward;
+            rewards[episodeBuffer.Count - 1] = terminalReward;
         }
 
         // Compute discounted returns

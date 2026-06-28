@@ -24,6 +24,13 @@ internal class Program
             return;
         }
 
+        // Check for hybrid training mode (behavior cloning + REINFORCE)
+        if (args.Length > 0 && args[0] == "hybrid")
+        {
+            RunHybridTraining().GetAwaiter().GetResult();
+            return;
+        }
+
         try
         {
             var builder = Host.CreateApplicationBuilder(args);
@@ -148,8 +155,25 @@ internal class Program
         {
             await runner.DisposeAsync();
         }
+    }
 
-        System.Console.WriteLine("\nPress any key to exit...");
-        System.Console.ReadKey();
+    static async Task RunHybridTraining()
+    {
+        var runner = new HybridTrainingRunner();
+
+        try
+        {
+            await runner.RunHybridTrainingAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Hybrid training failed: {ex.Message}");
+            System.Console.WriteLine(ex.StackTrace);
+            return;
+        }
+        finally
+        {
+            await runner.DisposeAsync();
+        }
     }
 }
