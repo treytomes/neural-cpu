@@ -197,8 +197,8 @@ public sealed class BehaviorCloningTrainer : IDisposable
 
         foreach (var demo in batch)
         {
-            // Get network prediction
-            var actionLogits = _controller.forward(demo.State);
+            // Get network prediction (encode state -> action logits)
+            var actionLogits = _controller.GetActionLogits(demo.State);
 
             // Compute loss for this demonstration
             var loss = ComputeCrossEntropyLoss(actionLogits, demo.Action);
@@ -231,7 +231,7 @@ public sealed class BehaviorCloningTrainer : IDisposable
 
             foreach (var demo in batch)
             {
-                var actionLogits = _controller.forward(demo.State);
+                var actionLogits = _controller.GetActionLogits(demo.State);
                 var loss = ComputeCrossEntropyLoss(actionLogits, demo.Action);
 
                 totalLoss += loss.item<float>();
@@ -315,7 +315,7 @@ public sealed class BehaviorCloningTrainer : IDisposable
 
         foreach (var demo in demonstrations)
         {
-            var actionLogits = _controller.forward(demo.State);
+            var actionLogits = _controller.GetActionLogits(demo.State);
             var predictedAction = _controller.DecodeEncodedEvent(actionLogits);
 
             // Check if prediction matches target

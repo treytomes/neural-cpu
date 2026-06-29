@@ -153,6 +153,7 @@ public sealed class HybridTrainingRunner
             stack,
             memory,
             mockNetwork,
+            controller,
             stateVectorBuilder,
             inputDevice,
             outputDevice,
@@ -306,7 +307,7 @@ public sealed class HybridTrainingRunner
 
             for (int ep = 0; ep < numEpisodes; ep++)
             {
-                TaskResult result = taskName switch
+                NeuralCpu.Network.Training.TaskResult result = taskName switch
                 {
                     "RegisterActivation" => task.RunRegisterActivationTask(),
                     "StackGrowth" => task.RunStackGrowthTask(),

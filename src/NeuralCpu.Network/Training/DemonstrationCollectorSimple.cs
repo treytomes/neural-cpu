@@ -29,6 +29,7 @@ public sealed class DemonstrationCollectorSimple
         Stack stack,
         Memory memory,
         CycleMockNetwork expertController,
+        TransformerCpuController encoder,
         StateVectorBuilder stateVectorBuilder,
         TaskInputDevice inputDevice,
         TaskOutputDevice outputDevice,
@@ -38,10 +39,13 @@ public sealed class DemonstrationCollectorSimple
     {
         var allDemonstrations = new Dictionary<string, List<Demonstration>>();
 
+        // Wrap expert with recording wrapper
+        var recordingController = new RecordingMockNetwork(expertController, encoder);
+
         var taskLogger = loggerFactory.CreateLogger<BasicMotorSkillsTask>();
         var task = new BasicMotorSkillsTask(
             eventBus, clock, registerFile, stack, memory,
-            expertController, stateVectorBuilder,
+            recordingController, stateVectorBuilder,
             taskLogger,
             maxCyclesPerEpisode: 50,
             inputDevice: inputDevice,
@@ -53,7 +57,7 @@ public sealed class DemonstrationCollectorSimple
         {
             _logger.LogInformation("Collecting demonstrations for {TaskName}...", taskName);
 
-            var demos = CollectForTask(task, expertController, taskName, episodesPerTask);
+            var demos = CollectForTask(task, recordingController, taskName, episodesPerTask);
             allDemonstrations[taskName] = demos;
 
             _logger.LogInformation("Collected {Count} demonstrations for {TaskName}",
@@ -65,7 +69,7 @@ public sealed class DemonstrationCollectorSimple
 
     private List<Demonstration> CollectForTask(
         BasicMotorSkillsTask task,
-        CycleMockNetwork controller,
+        RecordingMockNetwork controller,
         string taskName,
         int numEpisodes)
     {
@@ -75,6 +79,9 @@ public sealed class DemonstrationCollectorSimple
 
         for (int ep = 0; ep < maxAttempts && successCount < numEpisodes; ep++)
         {
+            // Clear previous recordings
+            controller.ClearRecordings();
+
             // Run the task
             TaskResult result = taskName switch
             {
@@ -88,20 +95,9 @@ public sealed class DemonstrationCollectorSimple
 
             if (result.Success)
             {
-                // Extract trajectory from controller's episode buffer
-                var trajectory = controller.GetEpisodeBuffer();
-
-                foreach (var step in trajectory)
-                {
-                    // step is (Tensor state, Tensor action, double reward)
-                    // We need to extract the encoded event from the action tensor
-                    var encodedEvent = controller.DecodeEncodedEvent(step.action);
-
-                    // Build state vector from the state tensor
-                    // For now, we'll use a simplified approach - store the raw state
-                    var demo = new Demonstration(step.state, encodedEvent);
-                    demonstrations.Add(demo);
-                }
+                // Extract demonstrations from recording controller
+                var episodeDemos = controller.GetDemonstrations();
+                demonstrations.AddRange(episodeDemos);
 
                 successCount++;
 
@@ -125,7 +121,7 @@ public sealed class DemonstrationCollectorSimple
     }
 
     /// <summary>
-    /// Saves demonstrations to disk.
+    /// Saves demonstrations to disk (metadata only - state vectors not serialized).
     /// </summary>
     public void SaveToDisk(Dictionary<string, List<Demonstration>> demonstrations, string directory)
     {
@@ -135,26 +131,26 @@ public sealed class DemonstrationCollectorSimple
         {
             var filePath = Path.Combine(directory, $"demonstrations_{taskName}.json");
 
-            // Serialize demonstrations (note: Tensor serialization may need special handling)
+            // Serialize demonstrations metadata (CpuStateVector is not serialized)
             var serializableDemo = demos.Select(d => new
             {
                 Action = d.Action,
-                StateSize = d.State.shape.Length // Just store metadata for now
+                RegisterCount = d.State.Registers.Length,
+                EventCount = d.State.EventHistory.Length
             }).ToList();
 
             var json = JsonSerializer.Serialize(serializableDemo, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filePath, json);
 
-            _logger.LogInformation("Saved {Count} demonstrations for {Task} to {Path}",
+            _logger.LogInformation("Saved {Count} demonstrations metadata for {Task} to {Path}",
                 demos.Count, taskName, filePath);
         }
     }
 }
 
 /// <summary>
-/// Represents a demonstration: (state tensor, action) pair.
-/// Note: State is a Tensor, not CpuStateVector, for simplicity.
+/// Represents a demonstration: (state vector, action) pair.
 /// </summary>
 public record Demonstration(
-    TorchSharp.torch.Tensor State,
+    CpuStateVector State,
     EncodedEvent Action);
